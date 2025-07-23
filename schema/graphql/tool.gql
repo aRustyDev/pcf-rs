@@ -1,0 +1,14 @@
+type Tool implements Node & Auditable {
+    name: String!
+    version: String
+    description: String
+    users: [Person!]!
+    actions: [Action!]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

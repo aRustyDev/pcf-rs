@@ -1,0 +1,11 @@
+type PoC implements Node {
+    id: ID!
+    name: String!
+    description: String
+    type: String!
+    externalUrl: String
+    code: String
+    findings: [Finding!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}

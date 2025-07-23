@@ -1,0 +1,22 @@
+type Person implements Node & Auditable {
+    firstName: String!
+    lastName: String!
+    identifiers: [Identifier]!
+    location: Location!
+    organization: Organization!
+    account: Account!
+    Host: Host!
+    Role: Role!
+    teams: [Team!]!
+    personalAccounts: [PersonalAccount!]!
+    assignedTasks: [Task!]!
+    createdFindings: [Finding!]!
+    toolsUsed: [Tool!]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

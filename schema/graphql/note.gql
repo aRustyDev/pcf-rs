@@ -1,0 +1,14 @@
+type Note implements Node & Auditable {
+    name: String!
+    content: String!
+    task: Task
+    project: Project
+    attachments: [File!]
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

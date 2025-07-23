@@ -1,0 +1,30 @@
+# TODO: KernelInfo; add KernelInfo
+#
+enum OSType {
+    WINDOWS "Microsoft Windows operating system"
+    FORTIOS "Fortinet FortiOS operating system"
+    ANDROID "Android operating system"
+    LINUX "Linux-based operating system"
+    MACOS "Apple macOS operating system"
+    CISCO "Cisco IOS operating system"
+    OTHER "Other operating system"
+    BSD "Berkeley Software Distribution"
+    IOS "Apple iOS operating system"
+}
+
+type OSInfo implements Node & Auditable {
+    name: String!
+    version: SemVer!
+    confidence: Float!
+    platform: OSType!
+    architecture: String
+    kernel: String
+    additionalInfo: JSON
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

@@ -1,0 +1,23 @@
+enum ActionType {
+    COMMAND
+    PROCESS
+    CONNECTION
+}
+
+type Action implements Node & Auditable {
+    type: ActionType!
+    string: String!
+    result: String!
+    tool: Tool!
+    executedBy: Account!
+    executedAt: DateTime!
+    ranFrom: Host!
+    ranOn: Host!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

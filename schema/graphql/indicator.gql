@@ -1,0 +1,13 @@
+type Indicator implements Node {
+    id: ID!
+    name: String!
+    type: String!
+    value: String!
+    confidence: Float
+    findings: [Finding!]!
+    filePath: String
+    scriptUrl: String
+    evidence: JSON
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}

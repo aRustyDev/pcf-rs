@@ -1,0 +1,39 @@
+enum DomainType {
+    DHCP "the scope of IP addresses managed by a specific DHCP server or a group of DHCP servers"
+    DNS "hierarchical naming system for organizing resources on the internet or a private network"
+    AD "A Windows security boundary with users, computers, and policies"
+}
+
+interface Domain {
+    type: DomainType!
+    name: String!
+}
+
+"""
+Logical namespace used in domain names (e.g., example.com)
+"""
+type DNSDomain implements Domain & Node & Auditable {
+    tls: Credential
+    records: [DNSRecord]!
+
+    # Implementations
+    name: String!
+    type: DomainType!
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+"A Windows security boundary with users, computers, and policies"
+type ADDomain implements Domain & Node & Auditable {
+    # Implementations
+    name: String!
+    type: DomainType!
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

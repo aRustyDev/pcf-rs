@@ -1,0 +1,13 @@
+type Credential implements Node {
+    type: CredentialType!
+    name: String
+    encryptedValue: String!
+    accounts: [Account!]!
+    hosts: [Host!]!
+    services: [Service!]!
+
+    # implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}

@@ -1,0 +1,69 @@
+enum AccountType {
+    PERSONAL
+    TARGET
+    TEAM
+}
+
+type Action implements Node & Auditable {
+    type: ActionType!
+    string: String!
+    result: String!
+    ranBy: Account!
+    ranFrom: Host!
+    ranOn: Host!
+}
+
+interface Account {
+    identifier: Identifier!
+    credentials: [Credential!]!
+}
+
+type PersonalAccount implements Node & Account & Auditable {
+    owner: Person!
+    platform: String!
+
+    # Implementations
+    identifier: Identifier!
+    credentials: [Credential!]!
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type TargetAccount implements Node & Account & Auditable {
+    targetPerson: Person
+    targetHost: Host
+    targetService: Service
+    privileges: [String!]
+
+    # Implementations
+    identifier: Identifier!
+    credentials: [Credential!]!
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type TeamAccount implements Node & Account & Auditable {
+    team: Team!
+    purpose: String!
+
+    # Implementations
+    identifier: Identifier!
+    credentials: [Credential!]!
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+input AccountFilter {
+    type: AccountType
+    ownerId: ID
+    teamId: ID
+}

@@ -1,0 +1,26 @@
+type Host implements Node & Auditable {
+    name: String!
+    ip: IpString!
+    domain: Domain!
+    os: OsInfo
+
+    # links
+    contains: [Credential]!
+    runs: [Service]!
+    memberOf: [Network]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+input HostCreateInput {
+    hostname: String
+    ipAddresses: [String!]!
+    macAddresses: [String!]
+    networkIds: [ID!]!
+    projectId: ID!
+}

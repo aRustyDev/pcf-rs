@@ -1,0 +1,110 @@
+# Connection types for all entities would be defined here...
+type OrganizationConnection {
+    edges: [OrganizationEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type OrganizationEdge {
+    cursor: String!
+    node: Organization!
+}
+
+type TeamConnection {
+    edges: [TeamEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type TeamEdge {
+    cursor: String!
+    node: Team!
+}
+
+type ProjectConnection {
+    edges: [ProjectEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type ProjectEdge {
+    cursor: String!
+    node: Project!
+}
+
+type PersonConnection {
+    edges: [PersonEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type PersonEdge {
+    cursor: String!
+    node: Person!
+}
+
+type NetworkConnection {
+    edges: [NetworkEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type NetworkEdge {
+    cursor: String!
+    node: Network!
+}
+
+type HostConnection {
+    edges: [HostEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type HostEdge {
+    cursor: String!
+    node: Host!
+}
+
+type ServiceConnection {
+    edges: [ServiceEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type ServiceEdge {
+    cursor: String!
+    node: Service!
+}
+
+type AccountConnection {
+    edges: [AccountEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type AccountEdge {
+    cursor: String!
+    node: Account!
+}
+
+type FindingConnection {
+    edges: [FindingEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type FindingEdge {
+    cursor: String!
+    node: Finding!
+}
+
+type ReportConnection {
+    edges: [ReportEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+}
+
+type ReportEdge {
+    cursor: String!
+    node: Report!
+}

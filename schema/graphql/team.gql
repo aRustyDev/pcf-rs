@@ -1,0 +1,14 @@
+type Team implements Node & Auditable {
+    name: String!
+    description: String
+    members: [Person!]!
+    projects: [Project!]!
+    accounts: [TeamAccount!]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

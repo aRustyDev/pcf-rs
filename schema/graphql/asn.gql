@@ -1,0 +1,22 @@
+scalar ASNOrgNameString
+
+enum ASNRegistry {
+    RIPE
+    APNIC
+    ARIN
+    LACNIC
+    AFRINIC
+}
+
+type ASN implements Node & Auditable {
+    handle: String!
+    organization: Organization!
+    registry: ASNRegistry!
+    country: Country!
+    covers: CIDRRange!
+
+    # Implementations
+    id: ID!
+    number: ASNString!
+    organization: Organization!
+}

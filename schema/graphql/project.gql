@@ -1,0 +1,26 @@
+type Project implements Node & Auditable {
+    name: String!
+    description: String
+    team: Team!
+    tasks: [Task!]!
+    findings: [Finding!]!
+    reports: [Report!]!
+    startDate: DateTime
+    endDate: DateTime
+    status: String!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+input ProjectCreateInput {
+    name: String!
+    description: String
+    teamId: ID!
+    startDate: DateTime
+    endDate: DateTime
+}

@@ -1,0 +1,25 @@
+enum ServiceLevel {
+    MANAGED
+    HOSTED
+    SUPPORTED
+    LICENSED
+    SELF_HOSTED
+}
+
+type Service implements Node & Auditable {
+    name: String!
+    level: ServiceLevel!
+    version: String!
+    sourcekind: SourceKind!
+    protocol: Protocol!
+    port: Int!
+    # defualts: string! # Should show service defaults
+    description: String!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

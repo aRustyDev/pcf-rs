@@ -1,0 +1,10 @@
+type Group implements Node & Auditable {
+    name: String!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

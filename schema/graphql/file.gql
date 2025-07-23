@@ -1,0 +1,11 @@
+type File implements Node {
+    id: ID!
+    filename: String!
+    mimeType: String!
+    size: Int!
+    storageKey: String!
+    host: Host
+    note: Note
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}

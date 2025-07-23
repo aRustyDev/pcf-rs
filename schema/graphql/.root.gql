@@ -1,0 +1,240 @@
+# Custom Scalars
+scalar DateTime
+scalar JSON
+
+schema {
+    query: Query
+    mutation: Mutation
+    subscription: Subscription
+}
+
+## Root Query Type
+
+type Query {
+    # Organization & Team Queries
+    organization(id: ID!): Organization
+    organizations(first: Int, after: String): OrganizationConnection!
+
+    team(id: ID!): Team
+    teams(organizationId: ID, first: Int, after: String): TeamConnection!
+
+    # Project Queries
+    project(id: ID!): Project
+    projects(
+        teamId: ID
+        status: String
+        first: Int
+        after: String
+    ): ProjectConnection!
+
+    # Person Queries
+    person(id: ID!): Person
+    people(teamId: ID, first: Int, after: String): PersonConnection!
+    currentUser: Person!
+
+    # Infrastructure Queries
+    network(id: ID!): Network
+    networks(projectId: ID!, first: Int, after: String): NetworkConnection!
+
+    host(id: ID!): Host
+    hosts(
+        projectId: ID!
+        networkId: ID
+        hasFindings: Boolean
+        first: Int
+        after: String
+    ): HostConnection!
+
+    service(id: ID!): Service
+    services(
+        hostId: ID
+        networkId: ID
+        port: Int
+        first: Int
+        after: String
+    ): ServiceConnection!
+
+    # Account Queries
+    account(id: ID!): Account
+    accounts(
+        filter: AccountFilter
+        first: Int
+        after: String
+    ): AccountConnection!
+
+    # Task Management Queries
+    task(id: ID!): Task
+    tasks(
+        filter: TaskFilter
+        orderBy: String
+        first: Int
+        after: String
+    ): TaskConnection!
+
+    finding(id: ID!): Finding
+    findings(
+        filter: FindingFilter
+        orderBy: String
+        first: Int
+        after: String
+    ): FindingConnection!
+
+    # Search Queries
+    searchHosts(query: String!, projectId: ID!): [Host!]!
+    searchServices(query: String!, projectId: ID!): [Service!]!
+    searchFindings(query: String!, projectId: ID!): [Finding!]!
+
+    # Reporting Queries
+    report(id: ID!): Report
+    reports(projectId: ID!, first: Int, after: String): ReportConnection!
+
+    # Pattern Matching
+    patterns(category: String): [Pattern!]!
+    matchPattern(patternId: ID!, text: String!): Boolean!
+}
+
+## Root Mutation Type
+
+type Mutation {
+    # Organization & Team Mutations
+    createOrganization(name: String!, description: String): Organization!
+    updateOrganization(
+        id: ID!
+        name: String
+        description: String
+    ): Organization!
+    deleteOrganization(id: ID!): Boolean!
+
+    createTeam(name: String!, description: String, organizationId: ID): Team!
+    addTeamMember(teamId: ID!, personId: ID!): Team!
+    removeTeamMember(teamId: ID!, personId: ID!): Team!
+
+    # Project Mutations
+    createProject(input: ProjectCreateInput!): Project!
+    updateProject(
+        id: ID!
+        name: String
+        description: String
+        status: String
+    ): Project!
+    archiveProject(id: ID!): Project!
+
+    # Infrastructure Mutations
+    createHost(input: HostCreateInput!): Host!
+    updateHost(id: ID!, hostname: String, ipAddresses: [String!]): Host!
+    deleteHost(id: ID!): Boolean!
+
+    createService(
+        name: String!
+        port: Int
+        protocol: String
+        hostIds: [ID!]!
+    ): Service!
+    updateService(id: ID!, name: String, version: String): Service!
+
+    createNetwork(
+        name: String!
+        cidr: String!
+        projectId: ID!
+        description: String
+    ): Network!
+
+    # Account & Credential Mutations
+    createPersonalAccount(
+        identifierId: ID!
+        ownerId: ID!
+        platform: String!
+    ): PersonalAccount!
+
+    createTargetAccount(
+        identifierId: ID!
+        targetPersonId: ID
+        targetHostId: ID
+        targetServiceId: ID
+    ): TargetAccount!
+
+    createCredential(
+        type: CredentialType!
+        name: String
+        accountIds: [ID!]!
+    ): Credential!
+
+    associateCredential(credentialId: ID!, accountId: ID!): Account!
+
+    # Task Management Mutations
+    createTask(input: TaskCreateInput!): Task!
+    updateTask(
+        id: ID!
+        title: String
+        description: String
+        status: TaskStatus
+        priority: TaskPriority
+    ): Task!
+    assignTask(taskId: ID!, assigneeIds: [ID!]!): Task!
+    completeTask(id: ID!): Task!
+
+    # Finding Mutations
+    createFinding(input: FindingCreateInput!): Finding!
+    updateFinding(
+        id: ID!
+        title: String
+        description: String
+        severity: FindingSeverity
+        verified: Boolean
+    ): Finding!
+    verifyFinding(id: ID!): Finding!
+
+    addIndicator(
+        findingId: ID!
+        name: String!
+        type: String!
+        value: String!
+        confidence: Float
+    ): Indicator!
+
+    addProofOfConcept(
+        findingId: ID!
+        name: String!
+        type: String!
+        externalUrl: String
+        code: String
+    ): PoC!
+
+    # Collaboration Mutations
+    addComment(taskId: ID!, content: String!, parentCommentId: ID): Comment!
+    updateComment(id: ID!, content: String!): Comment!
+    deleteComment(id: ID!): Boolean!
+
+    addNote(content: String!, taskId: ID, projectId: ID): Note!
+
+    # Reporting Mutations
+    generateReport(
+        projectId: ID!
+        templateId: ID!
+        findingIds: [ID!]
+        taskIds: [ID!]
+    ): Report!
+}
+
+## Root Subscription Type
+
+type Subscription {
+    # Real-time Task Updates
+    taskUpdated(projectId: ID!): Task!
+    taskCreated(projectId: ID!): Task!
+    taskAssigned(personId: ID!): Task!
+
+    # Real-time Finding Updates
+    findingCreated(projectId: ID!): Finding!
+    findingVerified(projectId: ID!): Finding!
+
+    # Host Discovery
+    hostDiscovered(projectId: ID!): Host!
+    serviceDiscovered(projectId: ID!): Service!
+
+    # Collaboration
+    commentAdded(taskId: ID!): Comment!
+
+    # External Agent Updates
+    agentUpdate(agentId: ID!): AgentUpdate!
+}

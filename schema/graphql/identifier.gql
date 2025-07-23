@@ -1,0 +1,13 @@
+type Identifier implements Node & Auditable {
+    name: String!
+    value: String!
+    type: String!
+    accounts: [Account!]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

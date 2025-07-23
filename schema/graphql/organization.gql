@@ -1,0 +1,13 @@
+type Organization implements Node & Auditable {
+    asn: ASNOrgNameString!
+    title: String!
+    description: String!
+    teams: [Team!]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

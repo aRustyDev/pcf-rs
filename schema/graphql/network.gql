@@ -1,0 +1,94 @@
+# | Concept     | Description                                                                  |
+# | ----------- | ---------------------------------------------------------------------------- |
+# | **Network** | A top-level logical or physical grouping of address space (e.g., 10.0.0.0/8) |
+# | **Subnet**  | A subdivision of a network, defined by CIDR                                  |
+# | **VLAN**    | A virtual LAN, typically tied to L2 separation; might span multiple subnets  |
+# | **Enclave** | A security or access-based grouping of systems (could span networks)         |
+# | **Zone**    | Logical group (e.g., DMZ, internal, external)                                |
+
+# | Relationship                 | Cardinality | Meaning                                                                  |
+# | ---------------------------- | ----------- | ------------------------------------------------------------------------ |
+# | **Zone → Enclave**           | 1\:N        | A zone (e.g., "DMZ") contains many enclaves (e.g., "public-facing apps") |
+# | **Enclave → Network**        | 1\:N        | An enclave can include many networks                                     |
+# | **Network → Subnet**         | 1\:N        | A network contains multiple subnets                                      |
+# | **Subnet → Network**         | N:1         | Each subnet belongs to one network                                       |
+# | **Subnet ↔ VLAN**            | N\:M        | A VLAN can span multiple subnets, and a subnet can be part of a VLAN     |
+# | **VLAN → Subnet (optional)** | N\:M        | VLANs are not always tied to a single subnet                             |
+
+# Custom scalar for CIDR blocks like "10.0.0.0/24"
+scalar CIDR
+
+# Shared interface
+interface NetworkSegment {
+    name: String!
+    description: String
+}
+
+type Network implements NetworkSegment & Node & Auditable {
+    cidr: CIDR!
+    subnets: [Subnet!]!
+    services: [Service!]!
+
+    # Implementations
+    name: String!
+    description: String
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type Subnet implements NetworkSegment & Node & Auditable {
+    cidr: CIDR!
+    parentNetwork: Network!
+    vlan: VLAN
+
+    # Implementations
+    name: String!
+    description: String
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type VLAN implements NetworkSegment & Node & Auditable {
+    vlanId: Int!
+    subnets: [Subnet!]!
+
+    # Implementations
+    name: String!
+    description: String
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type Enclave implements NetworkSegment & Node & Auditable {
+    segments: [NetworkSegment!]! # A grouping of networks/subnets
+    # Implementations
+    name: String!
+    description: String
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type Zone implements NetworkSegment & Node & Auditable {
+    enclaves: [Enclave!]!
+
+    # Implementations
+    name: String!
+    description: String
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

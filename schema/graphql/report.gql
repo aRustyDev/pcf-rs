@@ -1,0 +1,14 @@
+type Report implements Node & Auditable {
+    id: ID!
+    name: String!
+    template: String!
+    project: Project!
+    includedFindings: [Finding!]!
+    includedTasks: [Task!]!
+    generatedContent: String
+    generatedAt: DateTime
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

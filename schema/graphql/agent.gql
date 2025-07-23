@@ -1,0 +1,6 @@
+type AgentUpdate {
+    agentId: ID!
+    type: String!
+    data: JSON!
+    timestamp: DateTime!
+}

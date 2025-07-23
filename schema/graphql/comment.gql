@@ -1,0 +1,11 @@
+type Comment implements Node & Auditable {
+    id: ID!
+    content: String!
+    task: Task!
+    parentComment: Comment
+    replies: [Comment!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}

@@ -1,0 +1,64 @@
+enum FindingSeverity {
+    CRITICAL
+    HIGH
+    MEDIUM
+    LOW
+    INFO
+}
+
+type AffectedEntity implements Node & Auditable {
+    Host: Host
+    Network: Network
+    Service: Service
+    VLAN: VLAN
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+type Finding implements Node & Auditable {
+    title: String!
+    summary: String!
+    recommendations: [String]!
+    description: String
+    impact: String
+    task: Task!
+    references: [String]!
+    affects: [AffectedEntity]! # Hosts/Networks/VLANs/Services
+    severity: FindingSeverity!
+    proofOfConcepts: [PoC!]!
+    indicators: [Indicator!]!
+    remediationSteps: String
+    reviewedBy: [Person]!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+input FindingCreateInput {
+    title: String!
+    description: String!
+    severity: FindingSeverity!
+    taskId: ID!
+    affectedHostIds: [ID!]
+    affectedNetworkIds: [ID!]
+    affectedServiceIds: [ID!]
+    remediationSteps: String
+    references: [String!]
+}
+
+input FindingFilter {
+    severity: FindingSeverity
+    verified: Boolean
+    projectId: ID
+    hostId: ID
+    networkId: ID
+}

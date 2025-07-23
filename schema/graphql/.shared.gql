@@ -1,0 +1,51 @@
+## Common Interfaces
+
+scalar CIDRRange
+scalar VersionString
+scalar SemVerString
+scalar PatternString
+scalar Ipv4String
+scalar Ipv6String
+
+enum SourceKind {
+    OPEN
+    CLOSED
+    ONREQUEST
+}
+
+enum Protocol {
+    HTTP
+    HTTPS
+    TCP
+    UDP
+    SMB
+}
+
+interface Node {
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+interface Auditable {
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+enum Country {
+    USA
+    CANADA
+    MEXICO
+}
+
+type Pattern implements Node {
+    name: String!
+    description: String
+    category: String
+    regex: PatternString!
+
+    # Implementations
+    id: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}

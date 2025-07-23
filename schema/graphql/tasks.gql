@@ -1,0 +1,76 @@
+interface Task {
+    title: String!
+    description: String!
+    type: TaskType!
+    status: TaskStatus!
+    priority: TaskPriority!
+    project: Project!
+    assignees: [Person!]!
+    parentTask: Task
+    childTasks: [Task!]!
+    relatedHosts: [Host!]!
+    relatedServices: [Service!]!
+    findings: [Finding!]!
+    notes: [Note!]!
+    comments: [Comment!]!
+    actions: [Action!]!
+    dueDate: DateTime
+    completedAt: DateTime
+}
+
+enum TaskStatus {
+    PLANNED
+    IN_PROGRESS
+    BLOCKED
+    COMPLETED
+    CANCELLED
+}
+
+enum TaskPriority {
+    CRITICAL
+    HIGH
+    MEDIUM
+    LOW
+}
+
+enum TaskType {
+    ISSUE
+    FEATURE
+    BUG
+    INTERVIEW
+    RFI
+    REPORT
+}
+
+type Issue implements Task & Node & Auditable {
+    id: ID!
+    title: String!
+    description: String!
+    type: TaskType!
+    status: TaskStatus!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    createdBy: Person!
+    updatedBy: Person!
+}
+
+input TaskCreateInput {
+    title: String!
+    description: String!
+    status: TaskStatus
+    priority: TaskPriority!
+    projectId: ID!
+    assigneeIds: [ID!]
+    parentTaskId: ID
+    relatedHostIds: [ID!]
+    relatedServiceIds: [ID!]
+    dueDate: DateTime
+}
+
+input TaskFilter {
+    status: TaskStatus
+    priority: TaskPriority
+    assigneeId: ID
+    projectId: ID
+    hasFindings: Boolean
+}
