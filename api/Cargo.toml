@@ -1,0 +1,33 @@
+[package]
+name = "pcf-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Web framework
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+
+# GraphQL
+async-graphql = "7.0.17"
+async-graphql-axum = "7.0"
+
+# SurrealDB
+surrealdb = { version = "2.3", features = ["protocol-ws"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Utilities
+dotenv = "0.15"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }

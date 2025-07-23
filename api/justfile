@@ -1,0 +1,14 @@
+clean:
+    pkill -f "pcf-api"
+    pkill -f "surreal"
+    rm -rf target
+
+build:
+    cargo build --release
+
+run:
+    SURREAL_CAPS_ALLOW_EXPERIMENTAL=graphql surreal start --user root --password root
+    cargo run
+
+test:
+    cargo test
