@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message ip {
+    string ipv4 = 1;
+    string cidr = 2;
+}

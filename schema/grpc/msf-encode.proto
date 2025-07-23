@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// https://www.offsec.com/metasploit-unleashed/msfencode/
+message msfencode {
+    string arch = 1;
+    string avoid = 2; // List '\x00\xff'
+    int32 count = 3;
+    string decoder = 4;
+    string platform = 5;
+    int32 maxSize = 6;
+    string format = 7; // bash,c,csharp,dw,dword,java,js_be,js_le,num,perl,pl,powershell,ps1,py,python,raw,rb,ruby,sh,vbapplication,vbscript,asp,aspx,aspx-exe,dll,elf,exe,exe-only,exe-service,exe-small,loop-vbs,macho,msi,msi-nouac,psh,psh-net,psh-reflection,vba,vba-exe,vbs,war
+    string verbose = 8;
+}
+
+// -d   Specify the directory in which to look for EXE templates
+// -i   Encode the contents of the supplied file path
+// -o   The output file
+// -k        Keep template working; run payload in new thread (use with -x)
+// -m   Specifies an additional module search path
+// -x   Specify an alternate executable template
