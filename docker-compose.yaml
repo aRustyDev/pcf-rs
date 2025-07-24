@@ -1,0 +1,250 @@
+version: "3.9"
+
+services:
+    # OpenTelemetry Collector - Priority 2
+    otel-collector:
+        image: otel/opentelemetry-collector-contrib:latest
+        container_name: otel-collector
+        command: ["--config=/etc/otel-collector-config.yaml"]
+        volumes:
+            - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+        ports:
+            - "4317:4317" # OTLP gRPC receiver
+            - "4318:4318" # OTLP HTTP receiver
+            - "8888:8888" # Prometheus metrics exposed by the collector
+            - "8889:8889" # Prometheus exporter metrics
+            - "13133:13133" # health_check extension
+            - "55679:55679" # zpages extension
+        networks:
+            - dev-network
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "1"
+
+    # SpiceDB - Priority 3 (Database)
+    spicedb:
+        image: authzed/spicedb:latest
+        container_name: spicedb
+        command: serve --grpc-preshared-key "somerandomkeyhere" --grpc-no-tls --http-no-tls
+        environment:
+            SPICEDB_DATASTORE_ENGINE: memory
+            SPICEDB_OTEL_PROVIDER: otlp
+            SPICEDB_OTEL_ENDPOINT: otel-collector:4317
+            SPICEDB_OTEL_INSECURE: "true"
+        ports:
+            - "50051:50051" # gRPC
+            - "8443:8443" # HTTP
+            - "9090:9090" # Metrics
+        volumes:
+            - ./spicedb-schema.zed:/app/schema.zed:ro
+        networks:
+            - dev-network
+        depends_on:
+            - otel-collector
+        healthcheck:
+            test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "1"
+
+    # SurrealDB - Priority 3 (Database)
+    surrealdb:
+        image: surrealdb/surrealdb:latest
+        container_name: surrealdb
+        command: start --user root --pass root --bind 0.0.0.0:8000 file:/data/database.db
+        environment:
+            SURREAL_LOG_LEVEL: info
+        ports:
+            - "8000:8000"
+        volumes:
+            - surrealdb-data:/data
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - otel-collector
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 1G
+                    cpus: "1"
+
+    # Meilisearch - Priority 4
+    meilisearch:
+        image: getmeili/meilisearch:latest
+        container_name: meilisearch
+        environment:
+            MEILI_MASTER_KEY: masterKey
+            MEILI_NO_ANALYTICS: "true"
+            MEILI_ENV: development
+            MEILI_LOG_LEVEL: INFO
+        volumes:
+            - meilisearch-data:/meili_data
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - surrealdb
+            - otel-collector
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+
+    # Grafana Tempo - Priority 4
+    tempo:
+        image: grafana/tempo:latest
+        container_name: tempo
+        command: ["-config.file=/etc/tempo.yaml"]
+        volumes:
+            - ./tempo-config.yaml:/etc/tempo.yaml:ro
+            - tempo-data:/tmp/tempo
+        ports:
+            - "3200:3200" # tempo
+            - "4319:4319" # otlp grpc
+            - "4320:4320" # otlp http
+            - "9411:9411" # zipkin
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - otel-collector
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+
+    # Grafana Loki - Priority 4
+    loki:
+        image: grafana/loki:latest
+        container_name: loki
+        command: -config.file=/etc/loki/local-config.yaml
+        volumes:
+            - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+            - ./loki-runtime-config.yaml:/etc/loki/runtime-config.yaml:ro
+            - loki-data:/loki
+        ports:
+            - "3100:3100" # HTTP API
+            - "9096:9096" # gRPC
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - otel-collector
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--quiet",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:3100/ready",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+
+    # Grafana - Priority 4
+    grafana:
+        image: grafana/grafana:latest
+        container_name: grafana
+        environment:
+            GF_SECURITY_ADMIN_USER: admin
+            GF_SECURITY_ADMIN_PASSWORD: admin
+            GF_USERS_ALLOW_SIGN_UP: "false"
+        ports:
+            - "3000:3000"
+        volumes:
+            - grafana-data:/var/lib/grafana
+            - grafana-config:/etc/grafana
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - tempo
+            - loki
+            - otel-collector
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:3000/api/health || exit 1",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+
+    # API (Placeholder) - Priority 4
+    api:
+        image: aRustyDev/pcf-rs-api:latest
+        container_name: api
+        environment:
+            # Environment variables for service discovery
+            SPICEDB_ENDPOINT: spicedb:50051
+            SURREALDB_ENDPOINT: http://surrealdb:8000
+            MEILISEARCH_URL: http://meilisearch:7700
+            OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+            OTEL_EXPORTER_OTLP_INSECURE: "true"
+        ports:
+            - "8080:8080" # Assuming API runs on 8080
+        networks:
+            - dev-network
+        depends_on:
+            - spicedb
+            - surrealdb
+            - meilisearch
+            - otel-collector
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "1"
+
+networks:
+    dev-network:
+        driver: bridge
+        name: pcf-dev-network
+
+volumes:
+    surrealdb-data:
+        name: pcf-surrealdb-data
+    meilisearch-data:
+        name: pcf-meilisearch-data
+    tempo-data:
+        name: pcf-tempo-data
+    loki-data:
+        name: pcf-loki-data
+    grafana-data:
+        name: pcf-grafana-data
+    grafana-config:
+        name: pcf-grafana-config
