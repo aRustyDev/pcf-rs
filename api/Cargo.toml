@@ -12,7 +12,7 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Configuration
 figment = { version = "0.10", features = ["toml", "env"] }
-garde = "0.22.0"
+garde = { version = "0.22.0", features = ["derive", "regex"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 serde = { version = "1.0", features = ["derive"] }
 
