@@ -36,7 +36,7 @@ pub fn load_config() -> Result<AppConfig> {
         std::env::var("ENVIRONMENT").unwrap_or_else(|_| "production".to_string())
     );
     
-    let figment = Figment::new()
+    let mut figment = Figment::new()
         // 1. Embedded defaults (lowest priority)
         .merge(Serialized::defaults(AppConfig::default()))
         // 2. Default config file
@@ -44,10 +44,13 @@ pub fn load_config() -> Result<AppConfig> {
         // 3. Environment-specific config
         .merge(Toml::file(format!("config/{}.toml", env_name)).nested())
         // 4. Environment variables with APP_ prefix
-        .merge(Env::prefixed("APP_").split("__"))
-        // 5. CLI arguments (highest priority)
-        .merge(Serialized::defaults(&cli));
+        .merge(Env::prefixed("APP_").split("__"));
         
+    // 5. CLI arguments (highest priority) - handle Option fields properly
+    if let Some(port) = cli.port {
+        figment = figment.merge(("server.port", port));
+    }
+    
     let config: AppConfig = figment.extract()?;
     
     // Validate with Garde
