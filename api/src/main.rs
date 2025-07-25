@@ -4,5 +4,5 @@ mod health;
 mod server;
 
 fn main() {
-    println!("Hello, PCF API!");
+    // Phase 1: Basic server setup will be implemented in next checkpoint
 }
