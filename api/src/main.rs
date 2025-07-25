@@ -11,7 +11,21 @@ use tracing::{error, info};
 compile_error!("Demo mode MUST NOT be enabled in release builds");
 
 fn main() {
-    // Set up panic handler as per WORK_PLAN.md section 1.2.2
+    // Initialize logging FIRST
+    let config = config::LoggingConfig {
+        level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
+        format: match std::env::var("ENVIRONMENT").as_deref() {
+            Ok("development") => "pretty",
+            _ => "json",
+        }.to_string(),
+    };
+    
+    if let Err(e) = logging::setup_tracing(&config) {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
+    
+    // NOW set up panic handler (so it can use logging)
     panic::set_hook(Box::new(|panic_info| {
         error!(?panic_info, "FATAL: Panic occurred");
         std::process::exit(1);
@@ -19,8 +33,8 @@ fn main() {
     
     info!("PCF API starting up");
     
-    // Test logging sanitization
-    info!("Testing log sanitization with sensitive data: password=secret123 api_key_test123456789 john@example.com");
+    // Test sanitized logging with sensitive data
+    info_sanitized!("Testing sanitization: User john@example.com, password=secret123, API key: api_key_test123456789");
     
     // Phase 1: Basic server setup will be implemented in next checkpoint
     info!("Phase 1 foundation complete - ready for server implementation");

@@ -76,3 +76,39 @@ pub fn sanitize_log_message(message: &str) -> String {
     
     result
 }
+
+/// Sanitized logging macros that automatically apply sensitive data removal
+#[macro_export]
+macro_rules! info_sanitized {
+    ($($arg:tt)*) => {
+        tracing::info!("{}", $crate::logging::sanitize_log_message(&format!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! error_sanitized {
+    ($($arg:tt)*) => {
+        tracing::error!("{}", $crate::logging::sanitize_log_message(&format!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! warn_sanitized {
+    ($($arg:tt)*) => {
+        tracing::warn!("{}", $crate::logging::sanitize_log_message(&format!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! debug_sanitized {
+    ($($arg:tt)*) => {
+        tracing::debug!("{}", $crate::logging::sanitize_log_message(&format!($($arg)*)))
+    };
+}
+
+#[macro_export]
+macro_rules! trace_sanitized {
+    ($($arg:tt)*) => {
+        tracing::trace!("{}", $crate::logging::sanitize_log_message(&format!($($arg)*)))
+    };
+}

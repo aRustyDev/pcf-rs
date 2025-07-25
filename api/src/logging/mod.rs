@@ -83,7 +83,7 @@ mod tests {
             format: "json".to_string(),
         };
         
-        let pretty_config = crate::config::LoggingConfig {
+        let _pretty_config = crate::config::LoggingConfig {
             level: "debug".to_string(),
             format: "pretty".to_string(),
         };
@@ -100,5 +100,21 @@ mod tests {
         let result_invalid = setup_tracing(&invalid_config);
         assert!(result_invalid.is_err());
         assert!(result_invalid.unwrap_err().to_string().contains("Unsupported log format"));
+    }
+
+    #[test]
+    fn test_sanitized_macros() {
+        // Test that sanitized macros work correctly
+        // Note: These macros call the sanitization function, so we verify they compile and work
+        let test_message = "User john@example.com used password=secret123";
+        let sanitized = sanitize_log_message(test_message);
+        
+        // Verify sanitization worked
+        assert_eq!(sanitized, "User ***@example.com used password=[REDACTED]");
+        
+        // The macros themselves can't be easily unit tested since they emit logs,
+        // but we can ensure they compile and the underlying sanitization works
+        assert!(!sanitized.contains("john"));
+        assert!(!sanitized.contains("secret123"));
     }
 }

@@ -50,6 +50,7 @@ pub struct TraceId(pub String);
 
 impl TraceId {
     /// Get the trace ID as a string
+    #[allow(dead_code)] // Will be used when server is implemented
     pub fn as_str(&self) -> &str {
         &self.0
     }

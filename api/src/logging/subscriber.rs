@@ -3,7 +3,6 @@ use tracing_subscriber::{
     layer::SubscriberExt,
     util::SubscriberInitExt,
     EnvFilter,
-    Layer,
 };
 use uuid::Uuid;
 
