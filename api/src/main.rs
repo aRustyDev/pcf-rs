@@ -33,9 +33,6 @@ fn main() {
     
     info!("PCF API starting up");
     
-    // Test sanitized logging with sensitive data
-    info_sanitized!("Testing sanitization: User john@example.com, password=secret123, API key: api_key_test123456789");
-    
     // Phase 1: Basic server setup will be implemented in next checkpoint
     info!("Phase 1 foundation complete - ready for server implementation");
 }
