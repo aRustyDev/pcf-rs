@@ -1,0 +1,12 @@
+# Ignore everything except the release binary
+target/*
+!target/release/
+target/release/*
+!target/release/pcf-api
+
+Dockerfile
+.dockerignore
+.git/
+.gitignore
+*.md
+justfile

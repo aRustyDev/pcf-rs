@@ -4,30 +4,48 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Web framework
-axum = "0.8"
-tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors"] }
-
-# GraphQL
-async-graphql = "7.0.17"
+# Use vendored OpenSSL for static compilation
+openssl = { version = "0.10", features = ["vendored"] }
+# Existing dependencies
+anyhow = "1.0"
+async-graphql = { version = "7.0", features = ["chrono", "uuid"] }
 async-graphql-axum = "7.0"
-
-# SurrealDB
-surrealdb = { version = "2.3", features = ["protocol-ws"] }
-
-# Serialization
+axum = { version = "0.8", features = ["macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+dotenv = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-# Error handling
-anyhow = "1.0"
+surrealdb = { version = "2.3", features = ["kv-rocksdb"] }
 thiserror = "1.0"
-
-# Utilities
-dotenv = "0.15"
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = "0.1"
+lazy_static = "1.5"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
-uuid = { version = "1.8", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# New dependencies for ORY and SpiceDB
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+tonic = "0.12"
+prost = "0.13"
+
+# ORY Kratos client
+ory-kratos-client = "1.0"
+
+# SpiceDB client - using the opinionated, type-safe crate
+spicedb-rust = "0.3"
+
+# For webhook handling
+axum-extra = { version = "0.9", features = ["cookie"] }
+cookie = "0.18"
+
+# Configuration management
+figment = { version = "0.10", features = ["toml", "env"] }
+garde = "0.22.0"
+clap = { version = "4.0", features = ["derive", "env"] }
+toml = "0.8"
+
+[build-dependencies]
+tonic-build = "0.12"

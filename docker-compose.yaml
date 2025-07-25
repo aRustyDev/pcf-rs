@@ -1,13 +1,83 @@
-version: "3.9"
-
 services:
+    # Traefik - Reverse Proxy
+    traefik:
+        image: traefik:v3.0
+        container_name: traefik
+        command:
+            - "--api.insecure=true"
+            - "--providers.docker=true"
+            - "--providers.docker.exposedbydefault=false"
+            - "--entrypoints.web.address=:80"
+            - "--entrypoints.websecure.address=:443"
+            - "--log.level=DEBUG"
+        ports:
+            - "80:80"
+            - "443:443"
+            - "8080:8080" # Traefik dashboard
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        depends_on:
+            - hydra
+            - spicedb
+            - api
+        networks:
+            - dev-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+            - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+
+    # ORY Kratos - Identity Management
+    kratos:
+        image: oryd/kratos:v1.0.0
+        container_name: kratos
+        environment:
+            - DSN=memory
+            - LOG_LEVEL=debug
+        volumes:
+            - ./config/kratos:/etc/config/kratos
+        command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+        networks:
+            - dev-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.kratos-public.rule=Host(`kratos.localhost`)"
+            - "traefik.http.services.kratos-public.loadbalancer.server.port=4433"
+            - "traefik.http.routers.kratos-admin.rule=Host(`kratos-admin.localhost`)"
+            - "traefik.http.services.kratos-admin.loadbalancer.server.port=4434"
+
+    # ORY Hydra - OAuth2/OIDC (optional, if you need OAuth2)
+    hydra:
+        image: oryd/hydra:v2.2.0
+        container_name: hydra
+        environment:
+            - DSN=memory
+            - URLS_SELF_ISSUER=http://hydra.localhost
+            - URLS_CONSENT=http://localhost:3000/consent
+            - URLS_LOGIN=http://localhost:3000/login
+            - URLS_LOGOUT=http://localhost:3000/logout
+            - SECRETS_SYSTEM=youReallyNeedToChangeThis
+            - LOG_LEVEL=debug
+            - OAUTH2_EXPOSE_INTERNAL_ERRORS=true
+        command: serve all --dev
+        depends_on:
+            - kratos
+        networks:
+            - dev-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.hydra-public.rule=Host(`hydra.localhost`)"
+            - "traefik.http.services.hydra-public.loadbalancer.server.port=4444"
+            - "traefik.http.routers.hydra-admin.rule=Host(`hydra-admin.localhost`)"
+            - "traefik.http.services.hydra-admin.loadbalancer.server.port=4445"
+
     # OpenTelemetry Collector - Priority 2
     otel-collector:
         image: otel/opentelemetry-collector-contrib:latest
         container_name: otel-collector
         command: ["--config=/etc/otel-collector-config.yaml"]
         volumes:
-            - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+            - ./config/observability/otel-collector.yaml:/etc/otel-collector-config.yaml:ro
         ports:
             - "4317:4317" # OTLP gRPC receiver
             - "4318:4318" # OTLP HTTP receiver
@@ -22,27 +92,38 @@ services:
                 limits:
                     memory: 512M
                     cpus: "1"
+        depends_on:
+            - tempo
+            - loki
+            - mimir
+            - prometheus
 
     # SpiceDB - Priority 3 (Database)
     spicedb:
         image: authzed/spicedb:latest
         container_name: spicedb
-        command: serve --grpc-preshared-key "somerandomkeyhere" --grpc-no-tls --http-no-tls
-        environment:
-            SPICEDB_DATASTORE_ENGINE: memory
-            SPICEDB_OTEL_PROVIDER: otlp
-            SPICEDB_OTEL_ENDPOINT: otel-collector:4317
-            SPICEDB_OTEL_INSECURE: "true"
+        command: serve --grpc-preshared-key "somerandomkeyhere"
         ports:
-            - "50051:50051" # gRPC
-            - "8443:8443" # HTTP
-            - "9090:9090" # Metrics
+            - "50051:50051"
+            - "8443:8443"
+        # command: serve --grpc-preshared-key "somerandomkeyhere" --datastore-engine memory
+        environment:
+            SPICEDB_GRPC_PRESHARED_KEY: somerandomkeyhere
+            SPICEDB_DATASTORE_ENGINE: postgres
+            SPICEDB_DATASTORE_CONN_URI: postgres://spicedb:spicedb@postgres:5432/spicedb?sslmode=disable
+
+            # SPICEDB_OTEL_PROVIDER: otlp
+            # SPICEDB_OTEL_ENDPOINT: otel-collector:4317
+            # SPICEDB_OTEL_INSECURE: "true"
         volumes:
-            - ./spicedb-schema.zed:/app/schema.zed:ro
+            - ./schema/spicedb/example.zed:/app/schema.zed:ro
         networks:
             - dev-network
         depends_on:
-            - otel-collector
+            postgres:
+                condition: service_healthy
+            otel-collector:
+                condition: service_started
         healthcheck:
             test: ["CMD", "grpc_health_probe", "-addr=:50051"]
             interval: 10s
@@ -53,61 +134,131 @@ services:
                 limits:
                     memory: 512M
                     cpus: "1"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.spicedb.rule=Host(`spicedb.localhost`)"
+            - "traefik.http.services.spicedb.loadbalancer.server.port=8443"
+            - "traefik.tcp.routers.spicedb-grpc.rule=HostSNI(`spicedb-grpc.localhost`)"
+            - "traefik.tcp.routers.spicedb-grpc.entrypoints=web"
+            - "traefik.tcp.services.spicedb-grpc.loadbalancer.server.port=50051"
+
+    # SpiceDB Migrations
+    spicedb-migrate:
+        image: authzed/spicedb:latest
+        command: migrate head
+        environment:
+            SPICEDB_DATASTORE_ENGINE: postgres
+            SPICEDB_DATASTORE_CONN_URI: postgres://spicedb:spicedb@postgres:5432/spicedb?sslmode=disable
+        networks:
+            - dev-network
+        depends_on:
+            postgres:
+                condition: service_healthy
+                restart: true
+            otel-collector:
+                condition: service_started
+
+    # PostgreSQL for SpiceDB
+    postgres:
+        image: postgres:14
+        container_name: postgres
+        environment:
+            - POSTGRES_USER=spicedb
+            - POSTGRES_PASSWORD=spicedb
+            - POSTGRES_DB=spicedb
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        networks:
+            - dev-network
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U spicedb"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
 
     # SurrealDB - Priority 3 (Database)
     surrealdb:
         image: surrealdb/surrealdb:latest
         container_name: surrealdb
-        command: start --user root --pass root --bind 0.0.0.0:8000 file:/data/database.db
+        command: start --user root --pass root --bind 0.0.0.0:8000 memory
         environment:
             SURREAL_LOG_LEVEL: info
-        ports:
-            - "8000:8000"
+            SURREAL_CAPS_ALLOW_EXPERIMENTAL: graphql
         volumes:
             - surrealdb-data:/data
+        ports:
+            - "8000:8000"
         networks:
             - dev-network
         depends_on:
             - spicedb
             - otel-collector
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-            interval: 10s
-            timeout: 5s
-            retries: 5
+        # Health check removed - SurrealDB container doesn't include shell/curl
         deploy:
             resources:
                 limits:
                     memory: 1G
                     cpus: "1"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.surrealdb.rule=Host(`surrealdb.localhost`)"
+            - "traefik.http.services.surrealdb.loadbalancer.server.port=8000"
 
-    # Meilisearch - Priority 4
-    meilisearch:
-        image: getmeili/meilisearch:latest
-        container_name: meilisearch
-        environment:
-            MEILI_MASTER_KEY: masterKey
-            MEILI_NO_ANALYTICS: "true"
-            MEILI_ENV: development
-            MEILI_LOG_LEVEL: INFO
+    # # Meilisearch - Priority 4
+    # meilisearch:
+    #     image: getmeili/meilisearch:latest
+    #     container_name: meilisearch
+    #     environment:
+    #         MEILI_MASTER_KEY: masterKey
+    #         MEILI_NO_ANALYTICS: "true"
+    #         MEILI_ENV: development
+    #         MEILI_LOG_LEVEL: INFO
+    #     volumes:
+    #         - meilisearch-data:/meili_data
+    #     networks:
+    #         - dev-network
+    #     depends_on:
+    #         - spicedb
+    #         - surrealdb
+    #         - otel-collector
+    #     healthcheck:
+    #         test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+    #         interval: 10s
+    #         timeout: 5s
+    #         retries: 5
+    #     deploy:
+    #         resources:
+    #             limits:
+    #                 memory: 512M
+    #                 cpus: "0.5"
+
+    # Mimir for long-term metric storage
+    mimir:
+        image: grafana/mimir:latest
+        container_name: mimir
+        command: ["-config.file=/etc/mimir.yaml"]
         volumes:
-            - meilisearch-data:/meili_data
-        networks:
-            - dev-network
+            - ./config/observability/mimir.yaml:/etc/mimir.yaml
+            - mimir-data:/data
+        ports:
+            - "9009:9009" # Mimir HTTP API
+
+    # Prometheus for metric collection (writes to Mimir)
+    prometheus:
+        image: prom/prometheus:latest
+        container_name: prometheus
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.enable-remote-write-receiver"
+            - "--enable-feature=exemplar-storage" # Enable exemplar storage to link metrics with traces
+        volumes:
+            - ./config/observability/prometheus.yaml:/etc/prometheus/prometheus.yml
+            - prometheus-data:/prometheus
+        ports:
+            - "9090:9090"
         depends_on:
-            - spicedb
-            - surrealdb
-            - otel-collector
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
-            interval: 10s
-            timeout: 5s
-            retries: 5
-        deploy:
-            resources:
-                limits:
-                    memory: 512M
-                    cpus: "0.5"
+            - mimir
 
     # Grafana Tempo - Priority 4
     tempo:
@@ -115,7 +266,7 @@ services:
         container_name: tempo
         command: ["-config.file=/etc/tempo.yaml"]
         volumes:
-            - ./tempo-config.yaml:/etc/tempo.yaml:ro
+            - ./config/observability/tempo.yaml:/etc/tempo.yaml:ro
             - tempo-data:/tmp/tempo
         ports:
             - "3200:3200" # tempo
@@ -124,9 +275,6 @@ services:
             - "9411:9411" # zipkin
         networks:
             - dev-network
-        depends_on:
-            - spicedb
-            - otel-collector
         deploy:
             resources:
                 limits:
@@ -139,17 +287,14 @@ services:
         container_name: loki
         command: -config.file=/etc/loki/local-config.yaml
         volumes:
-            - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
-            - ./loki-runtime-config.yaml:/etc/loki/runtime-config.yaml:ro
+            - ./config/observability/loki.yaml:/etc/loki/local-config.yaml:ro
+            - ./config/observability/loki-runtime.yaml:/etc/loki/runtime-config.yaml:ro
             - loki-data:/loki
         ports:
             - "3100:3100" # HTTP API
             - "9096:9096" # gRPC
         networks:
             - dev-network
-        depends_on:
-            - spicedb
-            - otel-collector
         healthcheck:
             test:
                 [
@@ -177,14 +322,14 @@ services:
             GF_SECURITY_ADMIN_USER: admin
             GF_SECURITY_ADMIN_PASSWORD: admin
             GF_USERS_ALLOW_SIGN_UP: "false"
-        ports:
-            - "3000:3000"
         volumes:
             - grafana-data:/var/lib/grafana
-            - grafana-config:/etc/grafana
+            - ./config/observability/grafana:/etc/grafana
         networks:
             - dev-network
         depends_on:
+            - prometheus
+            - mimir
             - spicedb
             - tempo
             - loki
@@ -203,32 +348,67 @@ services:
                 limits:
                     memory: 512M
                     cpus: "0.5"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+            - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
     # API (Placeholder) - Priority 4
     api:
-        image: aRustyDev/pcf-rs-api:latest
+        image: busybox:latest
         container_name: api
+        command:
+            ["sh", "-c", "echo 'API placeholder running' && sleep infinity"]
         environment:
-            # Environment variables for service discovery
-            SPICEDB_ENDPOINT: spicedb:50051
-            SURREALDB_ENDPOINT: http://surrealdb:8000
-            MEILISEARCH_URL: http://meilisearch:7700
-            OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-            OTEL_EXPORTER_OTLP_INSECURE: "true"
-        ports:
-            - "8080:8080" # Assuming API runs on 8080
+            # Application environment
+            APP_ENVIRONMENT: development
+
+            # Database configuration
+            APP_DATABASE__SURREALDB__HOST: surrealdb
+            APP_DATABASE__SURREALDB__PORT: 8000
+            APP_DATABASE__SURREALDB__USERNAME: root
+            APP_DATABASE__SURREALDB__PASSWORD: root
+            APP_DATABASE__SURREALDB__NAMESPACE: test
+            APP_DATABASE__SURREALDB__DATABASE: test
+
+            # Service configuration
+            APP_SERVICES__SPICEDB__URL: spicedb:50051
+            APP_SERVICES__SPICEDB__TOKEN: somerandomkeyhere
+            APP_SERVICES__SPICEDB__INSECURE: "true"
+            APP_SERVICES__KRATOS__PUBLIC_URL: http://kratos:4433
+            APP_SERVICES__KRATOS__ADMIN_URL: http://kratos:4434
+            APP_SERVICES__KRATOS__BROWSER_URL: http://localhost:4433
+
+            # Feature flags
+            APP_FEATURES__ENABLE_WEBHOOKS: "true"
+            APP_FEATURES__ENABLE_TELEMETRY: "true"
+
+            # GraphQL settings
+            APP_GRAPHQL__PLAYGROUND_ENABLED: "true"
+            APP_GRAPHQL__INTROSPECTION_ENABLED: "true"
+            APP_GRAPHQL__PLAYGROUND_ENDPOINT: http://localhost:4000
+            APP_GRAPHQL__GRAPHQL_ENDPOINT: http://localhost:4000/graphql
+
+            # Legacy environment variables for backwards compatibility
+            KRATOS_PUBLIC_URL: http://kratos:4433
+            KRATOS_ADMIN_URL: http://kratos:4434
         networks:
             - dev-network
         depends_on:
+            - hydra
             - spicedb
             - surrealdb
-            - meilisearch
+            # - meilisearch
             - otel-collector
         deploy:
             resources:
                 limits:
                     memory: 512M
                     cpus: "1"
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.api.rule=Host(`api.localhost`)"
+            - "traefik.http.services.api.loadbalancer.server.port=4000"
 
 networks:
     dev-network:
@@ -238,8 +418,12 @@ networks:
 volumes:
     surrealdb-data:
         name: pcf-surrealdb-data
-    meilisearch-data:
-        name: pcf-meilisearch-data
+    # meilisearch-data:
+    #     name: pcf-meilisearch-data
+    prometheus-data:
+        name: pcf-prometheus-data
+    mimir-data:
+        name: pcf-mimir-data
     tempo-data:
         name: pcf-tempo-data
     loki-data:
@@ -248,3 +432,5 @@ volumes:
         name: pcf-grafana-data
     grafana-config:
         name: pcf-grafana-config
+    postgres-data:
+        name: pcf-postgres-data

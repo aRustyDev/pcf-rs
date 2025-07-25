@@ -1,0 +1,1 @@
+// Error type definitions will be implemented here

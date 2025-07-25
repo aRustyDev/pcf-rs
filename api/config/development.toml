@@ -1,0 +1,26 @@
+# Development-specific configuration overrides
+
+[server]
+host = "0.0.0.0"
+port = 4000
+
+[database.surrealdb]
+host = "surrealdb"  # Docker service name
+port = 8000
+
+[services.spicedb]
+url = "spicedb:50051"  # Docker service name
+
+[services.kratos]
+public_url = "http://kratos:4433"
+admin_url = "http://kratos:4434"
+browser_url = "http://localhost:4433"
+
+[graphql]
+playground_enabled = true
+introspection_enabled = true
+playground_endpoint = "http://localhost:4000"
+graphql_endpoint = "http://localhost:4000/graphql"
+
+[security]
+cors_origins = ["*"]  # Allow all origins in development

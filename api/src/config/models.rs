@@ -1,0 +1,1 @@
+// Configuration structs will be implemented here

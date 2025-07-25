@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # SurrealDB
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    ports:
+      - "8000:8000"
+    command: start --user root --pass root
+    environment:
+      - SURREAL_CAPS_ALLOW_EXPERIMENTAL=graphql
+    volumes:
+      - surrealdb-data:/data
+
+  # SpiceDB
+  spicedb:
+    image: authzed/spicedb:latest
+    ports:
+      - "50051:50051"
+      - "8443:8443"
+    command: serve
+    environment:
+      - SPICEDB_GRPC_PRESHARED_KEY=somerandomkeyhere
+      - SPICEDB_DATASTORE_ENGINE=postgres
+      - SPICEDB_DATASTORE_CONN_URI=postgres://spicedb:spicedb@postgres:5432/spicedb?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # PostgreSQL for SpiceDB
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=spicedb
+      - POSTGRES_PASSWORD=spicedb
+      - POSTGRES_DB=spicedb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spicedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SpiceDB Migrations
+  spicedb-migrate:
+    image: authzed/spicedb:latest
+    command: migrate head
+    environment:
+      - SPICEDB_DATASTORE_ENGINE=postgres
+      - SPICEDB_DATASTORE_CONN_URI=postgres://spicedb:spicedb@postgres:5432/spicedb?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.simple
+    ports:
+      - "4000:4000"
+    environment:
+      - SPICEDB_URL=spicedb:50051
+      - SPICEDB_TOKEN=somerandomkeyhere
+      - KRATOS_PUBLIC_URL=http://kratos:4433
+    depends_on:
+      - surrealdb
+      - spicedb
+    networks:
+      - default
+
+volumes:
+  surrealdb-data:
+  postgres-data:
+
+networks:
+  default:
+    driver: bridge

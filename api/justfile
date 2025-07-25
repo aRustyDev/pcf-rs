@@ -6,9 +6,10 @@ clean:
 build:
     cargo build --release
 
-run:
-    SURREAL_CAPS_ALLOW_EXPERIMENTAL=graphql surreal start --user root --password root
-    cargo run
+build-all: build build-docker
+
+build-docker:
+    docker build -t arustydev/pcf-api -f build/Dockerfile .
 
 test:
     cargo test

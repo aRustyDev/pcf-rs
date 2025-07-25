@@ -1,0 +1,45 @@
+# Build stage
+FROM rust:latest AS builder
+
+WORKDIR /build
+
+# Copy cargo configuration first
+COPY ./build/.cargo .cargo
+
+# Copy Cargo files for dependency caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy main.rs for dependency compilation
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies
+RUN cargo build --release || true
+RUN rm -rf src
+
+# Copy actual source code
+COPY src ./src
+
+# Copy configuration files
+COPY config ./config
+
+# Build the final binary
+RUN cargo build --release
+
+# ============================================
+# Runtime stage - using minimal debian instead of scratch
+FROM debian:bookworm-slim
+
+# Install ca-certificates for HTTPS
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Copy the binary from builder
+COPY --from=builder /build/target/release/pcf-api /usr/local/bin/pcf-api
+
+# Copy configuration files
+COPY --from=builder /build/config /app/config
+
+# Expose the port (default 4000, configurable via APP_PORT)
+EXPOSE 4000
+
+# Run the binary
+ENTRYPOINT ["/usr/local/bin/pcf-api"]

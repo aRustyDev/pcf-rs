@@ -1,0 +1,54 @@
+# Default configuration for PCF API
+# This file contains default values that can be overridden by:
+# 1. Environment-specific config files (development.toml, production.toml)
+# 2. Environment variables (prefix: APP_)
+# 3. Command-line arguments
+
+[server]
+host = "0.0.0.0"
+port = 4000
+# workers = 4  # Optional: defaults to number of CPU cores
+
+[database.surrealdb]
+host = "localhost"
+port = 8000
+username = "root"
+password = "root"
+namespace = "test"
+database = "test"
+connection_timeout = 30
+
+[services.spicedb]
+url = "localhost:50051"
+token = "somerandomkeyhere"
+insecure = true
+
+[services.kratos]
+public_url = "http://localhost:4433"
+admin_url = "http://localhost:4434"
+browser_url = "http://localhost:4433"
+
+[graphql]
+playground_enabled = true
+introspection_enabled = true
+max_depth = 15
+max_complexity = 1000
+max_aliases = 15
+playground_endpoint = "http://localhost:4000"
+graphql_endpoint = "http://localhost:4000/graphql"
+
+[security]
+cors_origins = ["http://localhost:3000", "http://localhost:4000"]
+# jwt_secret = "your-secret-here"  # Set via environment variable in production
+
+# Example API keys (use environment variables in production)
+# [[security.api_keys]]
+# name = "service1"
+# key = "key1"
+# permissions = ["read", "write"]
+
+[features]
+enable_webhooks = true
+enable_telemetry = true
+default_org_email_domain = "@gitlab.com"
+default_org_id = "default"

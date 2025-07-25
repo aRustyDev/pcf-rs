@@ -1,0 +1,1 @@
+// Health state management will be implemented here
