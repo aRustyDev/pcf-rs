@@ -1,6 +1,7 @@
 mod config;
 mod error;
 mod health;
+mod logging;
 mod server;
 
 use std::panic;
@@ -17,6 +18,9 @@ fn main() {
     }));
     
     info!("PCF API starting up");
+    
+    // Test logging sanitization
+    info!("Testing log sanitization with sensitive data: password=secret123 api_key_test123456789 john@example.com");
     
     // Phase 1: Basic server setup will be implemented in next checkpoint
     info!("Phase 1 foundation complete - ready for server implementation");
