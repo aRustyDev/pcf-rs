@@ -2,7 +2,8 @@ pub mod models;
 pub mod validation;
 
 pub use models::*;
-pub use validation::*;
+// Note: validation module exports will be used when server is implemented
+pub use validation::{load_config, Cli};
 
 #[cfg(test)]
 mod tests {

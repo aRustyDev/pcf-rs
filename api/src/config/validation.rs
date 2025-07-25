@@ -29,6 +29,7 @@ pub struct Cli {
 }
 
 /// Load configuration with 4-tier hierarchy as specified in configuration.md
+/// TODO: Use in main once server is implemented in Checkpoint 4
 pub fn load_config() -> Result<AppConfig> {
     let cli = Cli::parse();
     let env_name = cli.environment.clone().unwrap_or_else(|| 
