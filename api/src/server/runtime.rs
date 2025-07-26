@@ -12,7 +12,16 @@ use crate::config::AppConfig;
 use crate::health::handlers::{liveness_handler, readiness_handler};
 use crate::logging::trace_requests;
 
-/// Start the Axum HTTP server with graceful shutdown
+/// Start the Axum HTTP server with health endpoints and graceful shutdown
+/// 
+/// This function creates an Axum HTTP server with the following features:
+/// - Health endpoints at /health/liveness and /health/readiness
+/// - Request tracing middleware with trace ID generation
+/// - CORS support for browser-based clients
+/// - Graceful shutdown on SIGTERM/SIGINT signals
+/// 
+/// The server will bind to the address and port specified in the configuration
+/// and will handle graceful shutdown within the configured timeout period.
 pub async fn start_server(config: AppConfig) -> Result<()> {
     info!("Starting PCF API server on {}:{}", config.server.bind, config.server.port);
     
@@ -24,13 +33,16 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
     let bind_addr = format!("{}:{}", config.server.bind, config.server.port);
     info!("Attempting to bind to {}", bind_addr);
     
-    let listener = TcpListener::bind(&bind_addr).await?;
+    let listener = TcpListener::bind(&bind_addr)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}. Is another process using this port?", bind_addr, e))?;
     info!("Server successfully bound to {}", bind_addr);
     
     info!("Starting HTTP server...");
     
-    // Start server (graceful shutdown will be added after tests pass)
+    // Start server with graceful shutdown
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(config.server.shutdown_timeout))
         .await?;
     
     info!("Server shutdown complete");
@@ -38,6 +50,11 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
 }
 
 /// Create the Axum router with all middleware and routes
+/// 
+/// Sets up the routing table with:
+/// - Health check endpoints for Kubernetes liveness/readiness probes
+/// - Request tracing middleware for observability
+/// - CORS middleware for browser compatibility
 fn create_router() -> Router {
     Router::new()
         // Health check routes
@@ -55,6 +72,13 @@ fn create_router() -> Router {
 }
 
 /// Wait for shutdown signal (SIGTERM or SIGINT)
+/// 
+/// This function creates signal handlers for graceful shutdown:
+/// - SIGINT (Ctrl+C) for development/manual shutdown
+/// - SIGTERM for production container shutdown
+/// 
+/// The function returns when either signal is received, allowing
+/// Axum to begin its graceful shutdown process.
 async fn shutdown_signal(_timeout_seconds: u64) {
     let ctrl_c = async {
         signal::ctrl_c()
