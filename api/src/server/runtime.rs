@@ -9,7 +9,7 @@ use tokio::signal;
 use tracing::info;
 
 use crate::config::AppConfig;
-use crate::health::handlers::{liveness_handler, readiness_handler};
+use crate::health::{handlers::{liveness_handler, readiness_handler}, HealthManager};
 use crate::logging::trace_requests;
 
 /// Start the Axum HTTP server with health endpoints and graceful shutdown
@@ -25,8 +25,11 @@ use crate::logging::trace_requests;
 pub async fn start_server(config: AppConfig) -> Result<()> {
     info!("Starting PCF API server on {}:{}", config.server.bind, config.server.port);
     
+    // Initialize health manager
+    let health_manager = HealthManager::new();
+    
     // Create Axum router with middleware and routes
-    let app = create_router();
+    let app = create_router(health_manager.clone());
     info!("Router created successfully");
     
     // Bind to configured address and port
@@ -39,6 +42,9 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
     info!("Server successfully bound to {}", bind_addr);
     
     info!("Starting HTTP server...");
+    
+    // Mark health manager as ready after server binds
+    health_manager.mark_ready().await;
     
     // Start server with graceful shutdown
     axum::serve(listener, app)
@@ -55,11 +61,15 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
 /// - Health check endpoints for Kubernetes liveness/readiness probes
 /// - Request tracing middleware for observability
 /// - CORS middleware for browser compatibility
-fn create_router() -> Router {
+fn create_router(health_manager: HealthManager) -> Router {
     Router::new()
-        // Health check routes
-        .route("/health/liveness", get(liveness_handler))
-        .route("/health/readiness", get(readiness_handler))
+        // Health check routes (per WORK_PLAN.md Task 1.6.1 and 1.6.2)
+        .route("/health", get(liveness_handler))              // Simple liveness check
+        .route("/health/liveness", get(liveness_handler))     // Keep existing for compatibility
+        .route("/health/ready", get(readiness_handler))       // JSON readiness with state management
+        .route("/health/readiness", get(readiness_handler))   // Keep existing for compatibility
+        // Add health manager state
+        .with_state(health_manager)
         // Add tracing middleware to all routes
         .layer(middleware::from_fn(trace_requests))
         // Add CORS middleware for browser requests
