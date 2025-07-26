@@ -18,25 +18,32 @@ static PATTERNS: OnceLock<SanitizationPatterns> = OnceLock::new();
 pub fn get_patterns() -> &'static SanitizationPatterns {
     PATTERNS.get_or_init(|| SanitizationPatterns {
         // Email addresses - keep domain visible
-        email: Regex::new(r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b").unwrap(),
+        email: Regex::new(r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b")
+            .expect("Valid email regex - compile time constant"),
         
         // Credit card numbers - any 13-19 digit sequence
-        credit_card: Regex::new(r"\b\d{13,19}\b").unwrap(),
+        credit_card: Regex::new(r"\b\d{13,19}\b")
+            .expect("Valid credit card regex - compile time constant"),
         
         // API keys - common patterns
-        api_key: Regex::new(r"\b(sk_|pk_|api_|key_)[a-zA-Z0-9_]{15,}\b").unwrap(),
+        api_key: Regex::new(r"\b(sk_|pk_|api_|key_)[a-zA-Z0-9_]{15,}\b")
+            .expect("Valid API key regex - compile time constant"),
         
         // Bearer tokens
-        bearer_token: Regex::new(r"Bearer\s+[a-zA-Z0-9\-_\.]+").unwrap(),
+        bearer_token: Regex::new(r"Bearer\s+[a-zA-Z0-9\-_\.]+")
+            .expect("Valid bearer token regex - compile time constant"),
         
         // Password fields in various formats
-        password_field: Regex::new(r"(?i)(password|passwd|pwd)\s*[:=]\s*\S+").unwrap(),
+        password_field: Regex::new(r"(?i)(password|passwd|pwd)\s*[:=]\s*\S+")
+            .expect("Valid password field regex - compile time constant"),
         
         // IPv4 addresses - show subnet only
-        ipv4_address: Regex::new(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b").unwrap(),
+        ipv4_address: Regex::new(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
+            .expect("Valid IPv4 regex - compile time constant"),
         
         // User home directories
-        user_path: Regex::new(r"/(?:home|Users)/([^/]+)").unwrap(),
+        user_path: Regex::new(r"/(?:home|Users)/([^/]+)")
+            .expect("Valid user path regex - compile time constant"),
     })
 }
 

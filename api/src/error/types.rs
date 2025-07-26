@@ -39,3 +39,16 @@ impl IntoResponse for AppError {
         (status, body).into_response()
     }
 }
+
+impl From<crate::services::database::DatabaseError> for AppError {
+    fn from(err: crate::services::database::DatabaseError) -> Self {
+        match err {
+            crate::services::database::DatabaseError::NotFound(msg) => AppError::InvalidInput(msg),
+            crate::services::database::DatabaseError::ValidationFailed(msg) => AppError::InvalidInput(msg),
+            crate::services::database::DatabaseError::Timeout(_) | 
+            crate::services::database::DatabaseError::ConnectionFailed(_) => 
+                AppError::ServiceUnavailable(err.to_string()),
+            _ => AppError::Server(err.to_string()),
+        }
+    }
+}

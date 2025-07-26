@@ -60,4 +60,49 @@ mod tests {
         let _service_unavailable = AppError::ServiceUnavailable("test".to_string());
         let _internal = AppError::Internal(anyhow::anyhow!("test"));
     }
+    
+    #[test]
+    fn test_database_error_conversion() {
+        use crate::services::database::DatabaseError;
+        
+        // Test NotFound -> InvalidInput conversion
+        let db_err = DatabaseError::NotFound("User with id 123 not found".to_string());
+        let app_err: AppError = db_err.into();
+        match app_err {
+            AppError::InvalidInput(msg) => assert!(msg.contains("not found")),
+            _ => panic!("Expected InvalidInput error"),
+        }
+        
+        // Test ValidationFailed -> InvalidInput conversion
+        let db_err = DatabaseError::ValidationFailed("Email is required".to_string());
+        let app_err: AppError = db_err.into();
+        match app_err {
+            AppError::InvalidInput(msg) => assert!(msg.contains("Email is required")),
+            _ => panic!("Expected InvalidInput error"),
+        }
+        
+        // Test ConnectionFailed -> ServiceUnavailable conversion
+        let db_err = DatabaseError::ConnectionFailed("Database unreachable".to_string());
+        let app_err: AppError = db_err.into();
+        match app_err {
+            AppError::ServiceUnavailable(_) => {},
+            _ => panic!("Expected ServiceUnavailable error"),
+        }
+        
+        // Test Timeout -> ServiceUnavailable conversion
+        let db_err = DatabaseError::Timeout("Query timeout after 30s".to_string());
+        let app_err: AppError = db_err.into();
+        match app_err {
+            AppError::ServiceUnavailable(_) => {},
+            _ => panic!("Expected ServiceUnavailable error"),
+        }
+        
+        // Test other errors -> Server conversion
+        let db_err = DatabaseError::Internal("Database index corruption".to_string());
+        let app_err: AppError = db_err.into();
+        match app_err {
+            AppError::Server(_) => {},
+            _ => panic!("Expected Server error"),
+        }
+    }
 }

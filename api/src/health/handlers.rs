@@ -18,7 +18,7 @@ pub async fn liveness_handler() -> Response<String> {
     Response::builder()
         .status(StatusCode::OK)
         .body("OK".to_string())
-        .unwrap()
+        .expect("Simple response build should never fail")
 }
 
 /// Readiness probe handler at /health/ready - indicates if the application is ready to serve traffic

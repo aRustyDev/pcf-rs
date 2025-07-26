@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use lazy_static::lazy_static;
 use serde_json::Value;
 use semver::{Version, VersionReq};
 use std::collections::HashMap;
@@ -73,22 +74,22 @@ pub enum DatabaseError {
     Internal(String),
 }
 
-/// Version compatibility checker
-pub struct VersionChecker {
-    supported_versions: VersionReq,
-    tested_versions: Vec<Version>,
+lazy_static! {
+    static ref SUPPORTED_VERSIONS: VersionReq = VersionReq::parse(">=1.0.0, <2.0.0")
+        .expect("Valid version requirement - compile time constant");
+    static ref TESTED_VERSIONS: Vec<Version> = vec![
+        Version::parse("1.0.0").expect("Valid version - compile time constant"),
+        Version::parse("1.1.0").expect("Valid version - compile time constant"),
+        Version::parse("1.2.0").expect("Valid version - compile time constant"),
+    ];
 }
+
+/// Version compatibility checker
+pub struct VersionChecker;
 
 impl VersionChecker {
     pub fn new() -> Self {
-        Self {
-            supported_versions: VersionReq::parse(">=1.0.0, <2.0.0").unwrap(),
-            tested_versions: vec![
-                Version::parse("1.0.0").unwrap(),
-                Version::parse("1.1.0").unwrap(),
-                Version::parse("1.2.0").unwrap(),
-            ],
-        }
+        Self
     }
     
     pub fn check_version(&self, version: &str) -> VersionCompatibility {
@@ -97,13 +98,13 @@ impl VersionChecker {
             Err(_) => return VersionCompatibility::Unknown,
         };
         
-        if !self.supported_versions.matches(&ver) {
+        if !SUPPORTED_VERSIONS.matches(&ver) {
             return VersionCompatibility::Incompatible(
-                format!("Version {} is not supported. Supported range: {}", version, self.supported_versions)
+                format!("Version {} is not supported. Supported range: {}", version, *SUPPORTED_VERSIONS)
             );
         }
         
-        if self.tested_versions.contains(&ver) {
+        if TESTED_VERSIONS.contains(&ver) {
             VersionCompatibility::Compatible
         } else {
             VersionCompatibility::Untested(
@@ -131,6 +132,25 @@ impl Default for VersionChecker {
 }
 
 /// Database service trait that all implementations must follow
+/// 
+/// # Example
+/// ```no_run
+/// # use async_trait::async_trait;
+/// # use pcf_api::services::database::{DatabaseService, MockDatabase};
+/// # use serde_json::json;
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let db = MockDatabase::new();
+/// db.connect().await?;
+/// 
+/// // Create a record
+/// let id = db.create("notes", json!({"title": "Test"})).await?;
+/// 
+/// // Read it back
+/// let record = db.read("notes", &id).await?;
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait]
 pub trait DatabaseService: Send + Sync {
     /// Connect to the database with retry logic

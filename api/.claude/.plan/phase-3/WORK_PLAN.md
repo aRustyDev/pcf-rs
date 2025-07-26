@@ -3,10 +3,10 @@
 ## Prerequisites
 
 Before starting Phase 3, ensure you have:
-- **Completed Phase 1 & 2**: Server foundation and database layer operational
+- **Completed Phase 1 & 2**: Server foundation and database layer fully operational
 - **GraphQL Knowledge**: Understanding of schemas, resolvers, subscriptions, and GraphQL best practices
 - **Async Rust Experience**: Comfortable with async resolvers and stream handling
-- **WebSocket Knowledge**: For subscription implementation
+- **WebSocket Knowledge**: Basic understanding for subscription implementation
 - **Security Awareness**: Understanding of GraphQL-specific vulnerabilities (depth attacks, N+1 queries)
 
 ## Quick Reference - Essential Resources
@@ -14,28 +14,30 @@ Before starting Phase 3, ensure you have:
 ### Example Files
 All example files are located in `/api/.claude/.spec/examples/`:
 - **[TDD Test Structure](../../.spec/examples/tdd-test-structure.rs)** - Comprehensive test examples following TDD
-- **[GraphQL Security Patterns](../../.spec/examples/graphql-security-patterns.rs)** - Query depth/complexity limiting (to be created)
-- **[Subscription Patterns](../../.spec/examples/subscription-patterns.rs)** - WebSocket subscription examples (to be created)
+- **[GraphQL Security Patterns](../../.spec/examples/graphql-security-patterns.rs)** - Query depth/complexity limiting
+- **[Subscription Patterns](../../.spec/examples/subscription-patterns.rs)** - WebSocket subscription examples
+- **[DataLoader Patterns](../../.spec/examples/dataloader-patterns.rs)** - N+1 query prevention
 
 ### Specification Documents
 Key specifications in `/api/.claude/.spec/`:
-- **[graphql-schema.md](../../.spec/graphql-schema.md)** - Complete GraphQL schema specification
 - **[SPEC.md](../../SPEC.md)** - GraphQL requirements (lines 25-30)
-- **[ROADMAP.md](../../ROADMAP.md)** - Phase 3 objectives (lines 68-98)
+- **[ROADMAP.md](../../ROADMAP.md)** - Phase 3 objectives (lines 68-95)
+- **[error-handling.md](../../.spec/error-handling.md)** - Error type mappings for GraphQL
 
 ### Quick Links
-- **Verification Script**: `scripts/verify-phase-3.sh` (to be created)
+- **Verification Script**: `scripts/verify-phase-3.sh`
 - **GraphQL Playground**: `http://localhost:8080/graphql` (demo mode only)
 - **Schema Export**: `http://localhost:8080/schema` (demo mode only)
 
 ## Overview
-This work plan implements a complete GraphQL API with queries, mutations, and subscriptions. Focus is on security (depth/complexity limits), performance (DataLoader pattern), and proper error handling. Each checkpoint represents a natural boundary for review.
+This work plan implements a complete GraphQL API with queries, mutations, and subscriptions. Focus is on security (depth/complexity limits), performance (DataLoader pattern), and proper error handling. The implementation follows TDD practices with clear checkpoint boundaries for review and correction.
 
 ## Build and Test Commands
 
 Continue using `just` as the command runner:
 - `just test` - Run all tests including GraphQL tests
 - `just test-graphql` - Run only GraphQL-related tests
+- `just graphql-playground` - Start server with GraphQL playground enabled
 - `just build` - Build the release binary
 - `just clean` - Clean up processes and build artifacts
 
@@ -47,12 +49,14 @@ Always use these commands instead of direct cargo commands to ensure consistency
 
 At each checkpoint:
 1. **STOP all work** and commit your code
-2. **Request external review** by providing:
+2. **Write any questions** to `api/.claude/.reviews/checkpoint-X-questions.md`
+3. **Request external review** by providing:
    - This WORK_PLAN.md file
    - The REVIEW_PLAN.md file  
    - The checkpoint number
    - All code and artifacts created
-3. **Wait for approval** before continuing to next section
+4. **Wait for feedback** in `api/.claude/.reviews/checkpoint-X-feedback.md`
+5. **DO NOT PROCEED** until you receive explicit approval
 
 ## Development Methodology: Test-Driven Development (TDD)
 
@@ -65,64 +69,70 @@ At each checkpoint:
 
 ## Done Criteria Checklist
 - [ ] GraphQL playground accessible in demo mode
-- [ ] All queries, mutations, subscriptions functional
-- [ ] Security controls enforced (depth, complexity, introspection)
+- [ ] All queries functional (note, notes, notesByAuthor, health)
+- [ ] All mutations functional (createNote, updateNote, deleteNote)
+- [ ] All subscriptions functional (noteCreated, noteUpdated, noteDeleted)
+- [ ] Security controls enforced (depth max 15, complexity max 1000)
 - [ ] Error handling returns proper GraphQL errors
-- [ ] Schema export available in demo mode
+- [ ] Schema export available in demo mode only
 - [ ] N+1 queries prevented with DataLoader
-- [ ] Subscriptions work over WebSocket
-- [ ] All resolvers have proper authorization checks
+- [ ] Subscriptions work over WebSocket with proper cleanup
+- [ ] All resolvers have proper authorization checks (demo mode bypass)
 - [ ] Metrics track GraphQL operations
+- [ ] No `.unwrap()` or `.expect()` in production code paths
 
 ## Work Breakdown with Review Checkpoints
 
-### 3.1 GraphQL Schema Setup & Context (2-3 work units)
+### 3.1 GraphQL Foundation & Context (2-3 work units)
 
 **Work Unit Context:**
 - **Complexity**: Medium - Setting up async-graphql with proper types
-- **Scope**: ~500 lines across 4-5 files
+- **Scope**: Target 400-600 lines across 5-6 files (MUST document justification if outside range)
 - **Key Components**: 
-  - GraphQL schema builder (~100 lines)
-  - Request context with database/auth (~150 lines)
-  - Error type mapping (~100 lines)
-  - Schema export endpoint (~50 lines)
-  - Basic playground setup (~100 lines)
-- **Patterns**: Dependency injection, context propagation
+  - GraphQL schema builder with type registry (~150 lines)
+  - Request context with database/auth integration (~150 lines)
+  - Error type mapping to GraphQL errors (~100 lines)
+  - Schema export endpoint (demo mode only) (~50 lines)
+  - Basic playground setup with security (~100 lines)
+- **Patterns**: Dependency injection, context propagation, error mapping
 
-#### Task 3.1.1: Write Schema Tests First
-Create `src/graphql/mod.rs` with comprehensive test module:
+#### Task 3.1.1: Write GraphQL Foundation Tests First
+Create `src/graphql/mod.rs` with comprehensive test module. MUST write and run tests first to see them fail before implementing:
 ```rust
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_graphql::{Schema, EmptyMutation, EmptySubscription};
+    use async_graphql::{Schema, EmptyMutation, EmptySubscription, Request};
     
     #[tokio::test]
     async fn test_schema_builds_successfully() {
-        let schema = create_schema();
+        let schema = create_schema(mock_database(), None);
         assert!(!schema.sdl().is_empty());
     }
     
     #[tokio::test]
     async fn test_health_query_available() {
-        let schema = create_schema();
+        let schema = create_schema(mock_database(), None);
         let query = r#"
             query {
                 health {
                     status
                     timestamp
+                    version
                 }
             }
         "#;
         
-        let result = schema.execute(query).await;
-        assert!(result.is_ok());
+        let request = Request::new(query);
+        let response = schema.execute(request).await;
+        assert!(response.errors.is_empty());
+        assert!(response.data.is_ok());
     }
     
     #[tokio::test]
     async fn test_introspection_disabled_in_production() {
         std::env::set_var("ENVIRONMENT", "production");
-        let schema = create_schema();
+        let schema = create_schema(mock_database(), None);
         
         let query = r#"
             query {
@@ -134,9 +144,18 @@ mod tests {
             }
         "#;
         
-        let result = schema.execute(query).await;
-        assert!(result.errors.len() > 0);
+        let request = Request::new(query);
+        let response = schema.execute(request).await;
+        assert!(!response.errors.is_empty());
+        assert!(response.errors[0].message.contains("Introspection"));
         std::env::remove_var("ENVIRONMENT");
+    }
+    
+    #[tokio::test]
+    async fn test_graphql_errors_mapped_correctly() {
+        let schema = create_schema(mock_database(), None);
+        // Test that AppError maps to proper GraphQL errors
+        // This will fail until error mapping is implemented
     }
 }
 ```
@@ -147,50 +166,55 @@ Create request context for dependency injection:
 // src/graphql/context.rs
 use crate::services::database::DatabaseService;
 use crate::auth::Session;
-use async_graphql::{Context, Result};
+use async_graphql::{Context, Result, ErrorExtensions};
 use std::sync::Arc;
 
+/// GraphQL request context containing shared resources
 pub struct GraphQLContext {
     pub database: Arc<dyn DatabaseService>,
     pub session: Option<Session>,
-    pub trace_id: String,
-    pub request_start: Instant,
-    // DataLoaders will be added later
+    pub request_id: String,
+    #[cfg(feature = "demo")]
+    pub demo_mode: bool,
 }
 
 impl GraphQLContext {
     pub fn new(
         database: Arc<dyn DatabaseService>,
         session: Option<Session>,
-        trace_id: String,
+        request_id: String,
     ) -> Self {
         Self {
             database,
             session,
-            trace_id,
-            request_start: Instant::now(),
+            request_id,
+            #[cfg(feature = "demo")]
+            demo_mode: true,
         }
     }
     
-    /// Check if user is authenticated
+    /// Check if user is authenticated (demo mode bypass)
     pub fn require_auth(&self) -> Result<&Session> {
+        #[cfg(feature = "demo")]
+        if self.demo_mode {
+            return Ok(self.session.as_ref().unwrap_or(&Session::demo()));
+        }
+        
         self.session.as_ref()
-            .ok_or_else(|| async_graphql::Error::new("Authentication required"))
-    }
-    
-    /// Get request duration for metrics
-    pub fn request_duration(&self) -> Duration {
-        self.request_start.elapsed()
+            .ok_or_else(|| {
+                async_graphql::Error::new("Authentication required")
+                    .extend_with(|_, e| e.set("code", "UNAUTHENTICATED"))
+            })
     }
 }
 
-// Extension trait for easy access from resolvers
+// Extension trait for easy context access
 pub trait ContextExt {
-    fn ctx(&self) -> Result<&GraphQLContext>;
+    fn get_context(&self) -> Result<&GraphQLContext>;
 }
 
 impl<'a> ContextExt for Context<'a> {
-    fn ctx(&self) -> Result<&GraphQLContext> {
+    fn get_context(&self) -> Result<&GraphQLContext> {
         self.data::<GraphQLContext>()
             .map_err(|_| async_graphql::Error::new("Context not available"))
     }
@@ -201,46 +225,31 @@ impl<'a> ContextExt for Context<'a> {
 Map application errors to GraphQL errors:
 ```rust
 // src/graphql/errors.rs
-use async_graphql::{Error as GraphQLError, ErrorExtensions};
 use crate::error::AppError;
+use async_graphql::{Error as GraphQLError, ErrorExtensions};
 
 impl From<AppError> for GraphQLError {
     fn from(err: AppError) -> Self {
         let (code, message) = match &err {
+            AppError::NotFound => ("NOT_FOUND", err.to_string()),
+            AppError::Unauthorized => ("UNAUTHORIZED", err.to_string()),
             AppError::InvalidInput(msg) => ("INVALID_INPUT", msg.clone()),
-            AppError::NotFound(msg) => ("NOT_FOUND", msg.clone()),
-            AppError::Unauthorized(msg) => ("UNAUTHORIZED", msg.clone()),
-            AppError::Forbidden(msg) => ("FORBIDDEN", msg.clone()),
-            AppError::ServiceUnavailable(msg) => ("SERVICE_UNAVAILABLE", msg.clone()),
-            AppError::Internal(_) => ("INTERNAL_ERROR", "An internal error occurred".to_string()),
+            AppError::DatabaseError(_) => ("DATABASE_ERROR", "Database operation failed".to_string()),
+            AppError::Internal(_) => ("INTERNAL_ERROR", "Internal server error".to_string()),
+            _ => ("UNKNOWN_ERROR", "An error occurred".to_string()),
         };
         
-        GraphQLError::new(message)
-            .extend_with(|_, e| {
-                e.set("code", code);
-                e.set("timestamp", chrono::Utc::now().to_rfc3339());
-                if let Ok(trace_id) = std::env::var("TRACE_ID") {
-                    e.set("traceId", trace_id);
-                }
-            })
+        GraphQLError::new(message).extend_with(|_, e| e.set("code", code))
     }
 }
 
-// Validation error mapping
-impl From<garde::Errors> for GraphQLError {
-    fn from(errors: garde::Errors) -> Self {
-        let messages: Vec<String> = errors
-            .into_iter()
-            .map(|(path, errors)| {
-                format!("{}: {}", path, errors.join(", "))
-            })
-            .collect();
-        
-        GraphQLError::new(messages.join("; "))
-            .extend_with(|_, e| {
-                e.set("code", "VALIDATION_ERROR");
-            })
-    }
+// Helper for field-level errors
+pub fn field_error(field: &str, message: &str) -> GraphQLError {
+    GraphQLError::new(message)
+        .extend_with(|_, e| {
+            e.set("code", "VALIDATION_ERROR");
+            e.set("field", field);
+        })
 }
 ```
 
@@ -248,55 +257,139 @@ impl From<garde::Errors> for GraphQLError {
 Build the GraphQL schema with proper configuration:
 ```rust
 // src/graphql/mod.rs
-use async_graphql::{Schema, SchemaBuilder, EmptyMutation, EmptySubscription};
-use async_graphql::extensions::Logger;
+use async_graphql::{
+    Schema, SchemaBuilder, EmptyMutation, EmptySubscription,
+    extensions::Logger,
+};
+use crate::services::database::DatabaseService;
+use std::sync::Arc;
 
 pub mod context;
 pub mod errors;
-pub mod resolvers;
-
-use context::GraphQLContext;
+pub mod query;
+pub mod mutation;
+pub mod subscription;
 
 pub type AppSchema = Schema<Query, Mutation, Subscription>;
 
-/// Create the GraphQL schema with all configurations
-pub fn create_schema() -> SchemaBuilder<Query, Mutation, Subscription> {
-    let mut builder = Schema::build(Query, Mutation, Subscription)
-        .extension(Logger);
+/// Create GraphQL schema with all resolvers and configuration
+pub fn create_schema(
+    database: Arc<dyn DatabaseService>,
+    config: Option<GraphQLConfig>,
+) -> AppSchema {
+    let config = config.unwrap_or_default();
     
-    // Add security extensions
-    if !is_demo_mode() {
-        builder = builder
-            .disable_introspection()
-            .limit_depth(get_max_depth())
-            .limit_complexity(get_max_complexity());
+    let mut builder = Schema::build(Query, Mutation, Subscription)
+        .data(database)
+        .limit_depth(config.max_depth)
+        .limit_complexity(config.max_complexity);
+    
+    // Disable introspection in production
+    if std::env::var("ENVIRONMENT").unwrap_or_default() == "production" {
+        builder = builder.disable_introspection();
     }
     
-    builder
+    // Add extensions
+    if config.enable_logging {
+        builder = builder.extension(Logger);
+    }
+    
+    builder.finish()
 }
 
-fn is_demo_mode() -> bool {
-    cfg!(feature = "demo") && cfg!(debug_assertions)
+#[derive(Debug, Clone)]
+pub struct GraphQLConfig {
+    pub max_depth: usize,
+    pub max_complexity: usize,
+    pub enable_logging: bool,
+    pub enable_playground: bool,
 }
 
-fn get_max_depth() -> usize {
-    std::env::var("GRAPHQL_MAX_DEPTH")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(15)
+impl Default for GraphQLConfig {
+    fn default() -> Self {
+        Self {
+            max_depth: 15,
+            max_complexity: 1000,
+            enable_logging: cfg!(debug_assertions),
+            enable_playground: cfg!(feature = "demo"),
+        }
+    }
 }
 
-fn get_max_complexity() -> usize {
-    std::env::var("GRAPHQL_MAX_COMPLEXITY")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1000)
-}
-
-// Temporary empty types - will be replaced in next sections
+// Root query type (placeholder for now)
 pub struct Query;
+
+#[async_graphql::Object]
+impl Query {
+    /// Health check endpoint
+    async fn health(&self, ctx: &async_graphql::Context<'_>) -> Result<HealthStatus> {
+        Ok(HealthStatus {
+            status: "healthy".to_string(),
+            timestamp: chrono::Utc::now(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        })
+    }
+}
+
+#[derive(async_graphql::SimpleObject)]
+pub struct HealthStatus {
+    pub status: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub version: String,
+}
+
+// Placeholder types
 pub struct Mutation;
 pub struct Subscription;
+```
+
+#### Task 3.1.5: Add GraphQL Endpoints
+Integrate GraphQL with Axum server:
+```rust
+// src/graphql/handlers.rs
+use axum::{
+    response::{Html, IntoResponse},
+    extract::{Extension, State},
+    Json,
+};
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use crate::graphql::{AppSchema, GraphQLContext};
+
+/// GraphQL playground handler (demo mode only)
+pub async fn graphql_playground() -> impl IntoResponse {
+    #[cfg(not(feature = "demo"))]
+    return (StatusCode::NOT_FOUND, "Not found");
+    
+    #[cfg(feature = "demo")]
+    Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
+}
+
+/// Main GraphQL handler
+pub async fn graphql_handler(
+    State(schema): State<AppSchema>,
+    Extension(session): Extension<Option<Session>>,
+    req: GraphQLRequest,
+) -> GraphQLResponse {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    
+    let context = GraphQLContext::new(
+        schema.data::<Arc<dyn DatabaseService>>().unwrap().clone(),
+        session,
+        request_id,
+    );
+    
+    schema.execute(req.into_inner().data(context)).await.into()
+}
+
+/// Schema export handler (demo mode only)
+pub async fn schema_handler(State(schema): State<AppSchema>) -> impl IntoResponse {
+    #[cfg(not(feature = "demo"))]
+    return (StatusCode::NOT_FOUND, "Not found");
+    
+    #[cfg(feature = "demo")]
+    (StatusCode::OK, schema.sdl())
+}
 ```
 
 ---
@@ -304,40 +397,33 @@ pub struct Subscription;
 
 **STOP HERE FOR EXTERNAL REVIEW**
 
-**Before requesting review, ensure you have:**
-1. Created GraphQL context with database and session
-2. Implemented error mapping from AppError to GraphQL errors
-3. Built schema with security configurations
-4. Disabled introspection in production
-5. Added depth and complexity limits
-6. Written tests for schema building
-7. Documented all public APIs
-8. Committed all work with message: "Checkpoint 1: GraphQL foundation complete"
+**Before requesting review:**
+1. Ensure all GraphQL foundation tests are written and failing appropriately
+2. Verify schema builds with health query working
+3. Check introspection is disabled in production
+4. Document all public APIs with rustdoc
+5. Write any questions to `api/.claude/.reviews/checkpoint-1-questions.md`
+6. Commit with message: "Checkpoint 1: GraphQL foundation complete"
 
-**Request review by providing:**
-- Link to this checkpoint in WORK_PLAN.md
-- Link to REVIEW_PLAN.md section for Checkpoint 1
-- Your git commit hash
-
-**DO NOT PROCEED** until you receive explicit approval.
+**DO NOT PROCEED** until review is complete and approved.
 
 ---
 
-### 3.2 Query Resolvers Implementation (3-4 work units)
+### 3.2 Query Resolvers & DataLoader (3-4 work units)
 
 **Work Unit Context:**
-- **Complexity**: Medium - Implementing all query operations
-- **Scope**: ~600 lines across 3-4 files
+- **Complexity**: High - Implementing efficient data fetching with N+1 prevention
+- **Scope**: Target 600-800 lines across 4-5 files (MUST document justification if outside range)
 - **Key Components**:
-  - Query root type with all operations (~200 lines)
-  - Note queries with pagination (~200 lines)
-  - Search functionality (~100 lines)
-  - Health check query (~50 lines)
-  - Authorization checks (~100 lines)
-- **Patterns**: Async resolvers, pagination, authorization
+  - Query resolvers for all read operations (~200 lines)
+  - DataLoader implementation for batching (~200 lines)
+  - Field resolvers with proper error handling (~150 lines)
+  - Pagination utilities (~100 lines)
+  - Query complexity calculation (~150 lines)
+- **Required Algorithms**: MUST implement batching algorithm, cursor-based pagination
 
 #### Task 3.2.1: Write Query Resolver Tests First
-Create comprehensive tests for all queries:
+Create comprehensive tests for all query operations:
 ```rust
 #[cfg(test)]
 mod query_tests {
@@ -345,107 +431,102 @@ mod query_tests {
     
     #[tokio::test]
     async fn test_note_by_id_query() {
-        let schema = create_test_schema().await;
-        
-        // Create a note first
-        let note_id = create_test_note(&schema).await;
-        
-        let query = format!(r#"
-            query {{
-                note(id: "{}") {{
+        let schema = create_test_schema();
+        let query = r#"
+            query GetNote($id: ID!) {
+                note(id: $id) {
                     id
                     title
                     content
                     author
-                }}
-            }}
-        "#, note_id);
+                    createdAt
+                    updatedAt
+                    tags
+                }
+            }
+        "#;
         
-        let result = schema.execute(query).await;
-        assert!(result.is_ok());
+        let variables = serde_json::json!({
+            "id": "notes:test123"
+        });
         
-        let data = result.data.into_json().unwrap();
-        assert_eq!(data["note"]["id"], note_id);
+        let request = Request::new(query).variables(variables);
+        let response = schema.execute(request).await;
+        assert!(response.errors.is_empty());
     }
     
     #[tokio::test]
     async fn test_notes_pagination() {
-        let schema = create_test_schema().await;
-        
-        // Create 15 notes
-        for i in 0..15 {
-            create_test_note_with_title(&schema, &format!("Note {}", i)).await;
-        }
-        
+        let schema = create_test_schema();
         let query = r#"
-            query {
-                notes(limit: 10, offset: 0) {
+            query GetNotes($first: Int, $after: String) {
+                notes(first: $first, after: $after) {
                     edges {
                         node {
+                            id
                             title
                         }
+                        cursor
                     }
                     pageInfo {
                         hasNextPage
-                        totalCount
+                        hasPreviousPage
+                        startCursor
+                        endCursor
                     }
                 }
             }
         "#;
         
-        let result = schema.execute(query).await;
-        let data = result.data.into_json().unwrap();
+        let variables = serde_json::json!({
+            "first": 10
+        });
         
-        assert_eq!(data["notes"]["edges"].as_array().unwrap().len(), 10);
-        assert_eq!(data["notes"]["pageInfo"]["hasNextPage"], true);
-        assert_eq!(data["notes"]["pageInfo"]["totalCount"], 15);
+        let request = Request::new(query).variables(variables);
+        let response = schema.execute(request).await;
+        assert!(response.errors.is_empty());
     }
     
     #[tokio::test]
-    async fn test_search_notes() {
-        let schema = create_test_schema().await;
-        
-        create_test_note_with_title(&schema, "GraphQL Tutorial").await;
-        create_test_note_with_title(&schema, "REST API Guide").await;
-        create_test_note_with_title(&schema, "GraphQL Best Practices").await;
-        
+    async fn test_notes_by_author_with_dataloader() {
+        // Test that multiple queries for same author use DataLoader
+        let schema = create_test_schema();
         let query = r#"
-            query {
-                searchNotes(query: "GraphQL") {
-                    title
+            query GetAuthorNotes {
+                user1: notesByAuthor(author: "user1") {
+                    id
+                }
+                user2: notesByAuthor(author: "user2") {
+                    id
+                }
+                user1Again: notesByAuthor(author: "user1") {
+                    id
                 }
             }
         "#;
         
-        let result = schema.execute(query).await;
-        let data = result.data.into_json().unwrap();
-        let results = data["searchNotes"].as_array().unwrap();
-        
-        assert_eq!(results.len(), 2);
-        assert!(results.iter().all(|n| n["title"].as_str().unwrap().contains("GraphQL")));
+        // Should only make 2 database queries, not 3
+        let response = schema.execute(Request::new(query)).await;
+        assert!(response.errors.is_empty());
     }
 }
 ```
 
-#### Task 3.2.2: Implement Query Root Type
-Create the main Query type with all operations:
+#### Task 3.2.2: Implement Query Resolvers
+Create the query resolvers with proper error handling:
 ```rust
-// src/graphql/resolvers/queries.rs
+// src/graphql/query/mod.rs
 use async_graphql::*;
-use crate::graphql::context::{GraphQLContext, ContextExt};
-use crate::schema::demo::Note;
+use crate::graphql::context::ContextExt;
+use crate::schema::Note;
 
-#[derive(Default)]
 pub struct Query;
 
 #[Object]
 impl Query {
     /// Get a single note by ID
     async fn note(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Note>> {
-        let context = ctx.ctx()?;
-        
-        // In demo mode, skip auth check
-        #[cfg(not(feature = "demo"))]
+        let context = ctx.get_context()?;
         context.require_auth()?;
         
         let note = context.database
@@ -453,223 +534,218 @@ impl Query {
             .await
             .map_err(|e| e.into())?;
         
-        Ok(note.map(|n| serde_json::from_value(n).unwrap()))
+        Ok(note.map(|data| serde_json::from_value(data).unwrap()))
     }
     
-    /// List all notes with pagination
-    #[graphql(complexity = "limit.unwrap_or(10) as usize")]
+    /// Get paginated list of notes
     async fn notes(
         &self,
         ctx: &Context<'_>,
-        #[graphql(default = 10, validator(minimum = 1, maximum = 100))]
-        limit: Option<i32>,
-        #[graphql(default = 0, validator(minimum = 0, maximum = 10000))]
-        offset: Option<i32>,
-    ) -> Result<NotesConnection> {
-        let context = ctx.ctx()?;
-        let limit = limit.unwrap_or(10) as usize;
-        let offset = offset.unwrap_or(0) as usize;
+        first: Option<i32>,
+        after: Option<String>,
+        last: Option<i32>,
+        before: Option<String>,
+    ) -> Result<Connection<String, Note>> {
+        let context = ctx.get_context()?;
+        context.require_auth()?;
         
-        // Query database
-        let query = Query::new()
-            .limit(limit)
-            .offset(offset)
-            .order_by("created_at DESC");
-            
-        let notes = context.database
-            .query("notes", query)
-            .await
-            .map_err(|e| e.into())?;
+        // Validate pagination parameters
+        if first.is_some() && last.is_some() {
+            return Err(Error::new("Cannot specify both 'first' and 'last'"));
+        }
         
-        // Get total count
-        let total_count = context.database
-            .count("notes")
-            .await
-            .map_err(|e| e.into())?;
+        let limit = first.or(last).unwrap_or(20).min(100);
         
-        // Build connection
-        Ok(build_connection(notes, total_count, limit, offset))
+        // Implement cursor-based pagination
+        query_notes_paginated(
+            context.database.clone(),
+            limit,
+            after,
+            before,
+        ).await
     }
     
-    /// List notes by author with pagination
-    #[graphql(complexity = "limit.unwrap_or(10) as usize")]
+    /// Get all notes by a specific author
     async fn notes_by_author(
         &self,
         ctx: &Context<'_>,
         author: String,
-        #[graphql(default = 10, validator(minimum = 1, maximum = 100))]
-        limit: Option<i32>,
-        #[graphql(default = 0, validator(minimum = 0, maximum = 10000))]
-        offset: Option<i32>,
-    ) -> Result<NotesConnection> {
-        let context = ctx.ctx()?;
+    ) -> Result<Vec<Note>> {
+        let context = ctx.get_context()?;
+        context.require_auth()?;
         
-        // Validate author parameter
-        if author.is_empty() || author.len() > 100 {
-            return Err(Error::new("Invalid author parameter"));
-        }
+        // Use DataLoader to batch requests
+        let loader = ctx.data::<DataLoader<AuthorNotesLoader>>()?;
+        loader.load_one(author).await
+            .map(|opt| opt.unwrap_or_default())
+    }
+}
+```
+
+#### Task 3.2.3: Implement DataLoader for N+1 Prevention
+Create DataLoader to batch database queries:
+```rust
+// src/graphql/dataloaders/mod.rs
+use async_graphql::dataloader::{DataLoader, Loader};
+use std::collections::HashMap;
+use async_trait::async_trait;
+
+pub struct AuthorNotesLoader {
+    database: Arc<dyn DatabaseService>,
+}
+
+#[async_trait]
+impl Loader<String> for AuthorNotesLoader {
+    type Value = Vec<Note>;
+    type Error = Arc<AppError>;
+    
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        let mut results = HashMap::new();
         
-        let limit = limit.unwrap_or(10) as usize;
-        let offset = offset.unwrap_or(0) as usize;
+        // Batch query for all authors at once
+        let query = Query::And(
+            keys.iter()
+                .map(|author| Query::Eq("author".to_string(), author.clone()))
+                .collect()
+        );
         
-        let query = Query::new()
-            .filter("author = $author")
-            .bind("author", author.clone())
-            .limit(limit)
-            .offset(offset)
-            .order_by("created_at DESC");
-            
-        let notes = context.database
+        let notes = self.database
             .query("notes", query)
             .await
-            .map_err(|e| e.into())?;
+            .map_err(|e| Arc::new(e.into()))?;
         
-        let total_count = context.database
-            .count_where("notes", "author = $author", &[("author", &author)])
-            .await
-            .map_err(|e| e.into())?;
-        
-        Ok(build_connection(notes, total_count, limit, offset))
-    }
-    
-    /// Search notes by title or content
-    #[graphql(complexity = "50")] // Expensive operation
-    async fn search_notes(
-        &self,
-        ctx: &Context<'_>,
-        query: String,
-        #[graphql(default = 10, validator(minimum = 1, maximum = 100))]
-        limit: Option<i32>,
-    ) -> Result<Vec<Note>> {
-        let context = ctx.ctx()?;
-        
-        // Validate search query
-        if query.is_empty() || query.len() > 200 {
-            return Err(Error::new("Invalid search query"));
+        // Group by author
+        for note_value in notes {
+            let note: Note = serde_json::from_value(note_value).unwrap();
+            results.entry(note.author.clone())
+                .or_insert_with(Vec::new)
+                .push(note);
         }
         
-        let limit = limit.unwrap_or(10) as usize;
+        // Ensure all keys have a value (empty vec if no notes)
+        for key in keys {
+            results.entry(key.clone()).or_insert_with(Vec::new);
+        }
         
-        // Use full-text search if available, otherwise fallback to LIKE
-        let search_query = Query::new()
-            .filter("title ~ $query OR content ~ $query")
-            .bind("query", query)
-            .limit(limit);
-            
-        let notes = context.database
-            .query("notes", search_query)
-            .await
-            .map_err(|e| e.into())?;
-        
-        Ok(notes.into_iter()
-            .map(|n| serde_json::from_value(n).unwrap())
-            .collect())
-    }
-    
-    /// Health check query (always available)
-    async fn health(&self, ctx: &Context<'_>) -> Result<HealthStatus> {
-        let context = ctx.ctx()?;
-        
-        let db_health = context.database.health_check().await;
-        
-        Ok(HealthStatus {
-            status: if db_health.is_healthy() { "healthy" } else { "unhealthy" }.to_string(),
-            timestamp: chrono::Utc::now(),
-            services: vec![
-                ServiceHealth {
-                    name: "database".to_string(),
-                    status: format!("{:?}", db_health),
-                }
-            ],
-        })
+        Ok(results)
     }
 }
 
-#[derive(SimpleObject)]
-struct HealthStatus {
-    status: String,
-    timestamp: chrono::DateTime<chrono::Utc>,
-    services: Vec<ServiceHealth>,
+// Factory function for creating DataLoaders
+pub fn create_dataloaders(database: Arc<dyn DatabaseService>) -> DataLoaderRegistry {
+    DataLoaderRegistry {
+        author_notes: DataLoader::new(
+            AuthorNotesLoader { database: database.clone() },
+            tokio::spawn
+        ),
+    }
 }
 
-#[derive(SimpleObject)]
-struct ServiceHealth {
-    name: String,
-    status: String,
+pub struct DataLoaderRegistry {
+    pub author_notes: DataLoader<AuthorNotesLoader>,
 }
 ```
 
-#### Task 3.2.3: Implement Pagination Types
-Create connection types for cursor-based pagination:
+#### Task 3.2.4: Implement Pagination Utilities
+Create reusable pagination logic:
 ```rust
-// src/graphql/resolvers/pagination.rs
+// src/graphql/pagination.rs
 use async_graphql::*;
+use base64::{Engine as _, engine::general_purpose};
 
-#[derive(SimpleObject)]
-pub struct NotesConnection {
-    edges: Vec<NoteEdge>,
-    page_info: PageInfo,
-    total_count: i32,
-}
-
-#[derive(SimpleObject)]
-pub struct NoteEdge {
-    node: Note,
-    cursor: String,
-}
-
-#[derive(SimpleObject)]
-pub struct PageInfo {
-    has_next_page: bool,
-    has_previous_page: bool,
-    start_cursor: Option<String>,
-    end_cursor: Option<String>,
-}
-
-pub fn build_connection(
-    notes: Vec<serde_json::Value>,
-    total_count: usize,
-    limit: usize,
-    offset: usize,
-) -> NotesConnection {
-    let edges: Vec<NoteEdge> = notes
+/// Cursor-based pagination following Relay specification
+pub async fn query_notes_paginated(
+    database: Arc<dyn DatabaseService>,
+    limit: i32,
+    after: Option<String>,
+    before: Option<String>,
+) -> Result<Connection<String, Note>> {
+    let mut connection = Connection::new(false, false);
+    
+    // Decode cursors
+    let after_id = after.and_then(|c| decode_cursor(&c));
+    let before_id = before.and_then(|c| decode_cursor(&c));
+    
+    // Build query with cursor constraints
+    let mut query = Query::All;
+    if let Some(id) = after_id {
+        query = Query::And(vec![query, Query::Gt("id".to_string(), id)]);
+    }
+    if let Some(id) = before_id {
+        query = Query::And(vec![query, Query::Lt("id".to_string(), id)]);
+    }
+    
+    // Fetch one extra to determine if there are more pages
+    let results = database
+        .query_with_limit("notes", query, limit + 1)
+        .await?;
+    
+    let has_next_page = results.len() > limit as usize;
+    let notes: Vec<Note> = results
         .into_iter()
-        .enumerate()
-        .map(|(idx, value)| {
-            let note: Note = serde_json::from_value(value).unwrap();
-            NoteEdge {
-                cursor: base64::encode(format!("cursor:{}", offset + idx)),
-                node: note,
-            }
-        })
+        .take(limit as usize)
+        .map(|v| serde_json::from_value(v).unwrap())
         .collect();
     
-    let page_info = PageInfo {
-        has_next_page: offset + limit < total_count,
-        has_previous_page: offset > 0,
-        start_cursor: edges.first().map(|e| e.cursor.clone()),
-        end_cursor: edges.last().map(|e| e.cursor.clone()),
-    };
-    
-    NotesConnection {
-        edges,
-        page_info,
-        total_count: total_count as i32,
+    // Build edges with cursors
+    for note in notes {
+        let cursor = encode_cursor(&note.id);
+        connection.edges.push(Edge::new(cursor.clone(), note));
     }
+    
+    // Set page info
+    if let Some(first_edge) = connection.edges.first() {
+        connection.page_info.start_cursor = Some(first_edge.cursor.clone());
+    }
+    if let Some(last_edge) = connection.edges.last() {
+        connection.page_info.end_cursor = Some(last_edge.cursor.clone());
+    }
+    connection.page_info.has_next_page = has_next_page;
+    connection.page_info.has_previous_page = after.is_some();
+    
+    Ok(connection)
+}
+
+fn encode_cursor(id: &str) -> String {
+    general_purpose::STANDARD.encode(id)
+}
+
+fn decode_cursor(cursor: &str) -> Option<String> {
+    general_purpose::STANDARD
+        .decode(cursor)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
 }
 ```
 
-### 3.3 Mutation Resolvers Implementation (2-3 work units)
+---
+## 🛑 CHECKPOINT 2: Query Implementation Review
+
+**STOP HERE FOR EXTERNAL REVIEW**
+
+**Before requesting review:**
+1. Test all query resolvers work correctly
+2. Verify DataLoader prevents N+1 queries
+3. Check pagination follows Relay specification
+4. Ensure proper error handling throughout
+5. Write any questions to `api/.claude/.reviews/checkpoint-2-questions.md`
+6. Commit with message: "Checkpoint 2: Query resolvers complete"
+
+**DO NOT PROCEED** until review is complete and approved.
+
+---
+
+### 3.3 Mutation Resolvers (2-3 work units)
 
 **Work Unit Context:**
 - **Complexity**: Medium - CRUD operations with validation
-- **Scope**: ~500 lines across 2-3 files
+- **Scope**: Target 400-500 lines across 3-4 files (MUST document justification if outside range)
 - **Key Components**:
-  - Mutation root type (~150 lines)
-  - Create/Update/Delete operations (~200 lines)
-  - Input validation with Garde (~100 lines)
-  - Authorization checks (~50 lines)
-- **Patterns**: Input validation, authorization, optimistic updates
+  - Create, Update, Delete mutations (~200 lines)
+  - Input type definitions with validation (~100 lines)
+  - Authorization checks for mutations (~50 lines)
+  - Side effect handling (~100 lines)
+- **Patterns**: Input validation, authorization, transactional operations
 
 #### Task 3.3.1: Write Mutation Tests First
 Test all mutation operations:
@@ -680,119 +756,130 @@ mod mutation_tests {
     
     #[tokio::test]
     async fn test_create_note_mutation() {
-        let schema = create_test_schema().await;
-        
+        let schema = create_test_schema();
         let mutation = r#"
-            mutation {
-                createNote(input: {
-                    title: "Test Note"
-                    content: "Test content"
-                    author: "test_user"
-                }) {
+            mutation CreateNote($input: CreateNoteInput!) {
+                createNote(input: $input) {
                     id
                     title
                     content
                     author
+                    tags
                 }
             }
         "#;
         
-        let result = schema.execute(mutation).await;
-        assert!(result.is_ok());
+        let variables = serde_json::json!({
+            "input": {
+                "title": "Test Note",
+                "content": "Test content",
+                "tags": ["test", "graphql"]
+            }
+        });
         
-        let data = result.data.into_json().unwrap();
-        assert_eq!(data["createNote"]["title"], "Test Note");
-        assert!(!data["createNote"]["id"].as_str().unwrap().is_empty());
+        let request = Request::new(mutation).variables(variables);
+        let response = schema.execute(request).await;
+        assert!(response.errors.is_empty());
     }
     
     #[tokio::test]
-    async fn test_update_note_mutation() {
-        let schema = create_test_schema().await;
-        let note_id = create_test_note(&schema).await;
-        
-        let mutation = format!(r#"
-            mutation {{
-                updateNote(id: "{}", input: {{
-                    title: "Updated Title"
-                }}) {{
+    async fn test_update_note_authorization() {
+        let schema = create_test_schema();
+        let mutation = r#"
+            mutation UpdateNote($id: ID!, $input: UpdateNoteInput!) {
+                updateNote(id: $id, input: $input) {
                     id
                     title
-                    updatedAt
-                }}
-            }}
-        "#, note_id);
+                    content
+                }
+            }
+        "#;
         
-        let result = schema.execute(mutation).await;
-        assert!(result.is_ok());
+        // Test that users can only update their own notes
+        let variables = serde_json::json!({
+            "id": "notes:other_user_note",
+            "input": {
+                "title": "Hacked!"
+            }
+        });
         
-        let data = result.data.into_json().unwrap();
-        assert_eq!(data["updateNote"]["title"], "Updated Title");
-    }
-    
-    #[tokio::test]
-    async fn test_delete_note_mutation() {
-        let schema = create_test_schema().await;
-        let note_id = create_test_note(&schema).await;
-        
-        let mutation = format!(r#"
-            mutation {{
-                deleteNote(id: "{}")
-            }}
-        "#, note_id);
-        
-        let result = schema.execute(mutation).await;
-        assert!(result.is_ok());
-        
-        let data = result.data.into_json().unwrap();
-        assert_eq!(data["deleteNote"], true);
-        
-        // Verify note is deleted
-        let query = format!(r#"
-            query {{
-                note(id: "{}") {{
-                    id
-                }}
-            }}
-        "#, note_id);
-        
-        let result = schema.execute(query).await;
-        let data = result.data.into_json().unwrap();
-        assert!(data["note"].is_null());
+        let request = Request::new(mutation).variables(variables);
+        let response = schema.execute(request).await;
+        assert!(!response.errors.is_empty());
+        assert!(response.errors[0].message.contains("Unauthorized"));
     }
 }
 ```
 
-#### Task 3.3.2: Implement Mutation Root Type
-Create mutations with proper validation:
+#### Task 3.3.2: Define Input Types with Validation
+Create input types for mutations:
 ```rust
-// src/graphql/resolvers/mutations.rs
+// src/graphql/mutation/inputs.rs
 use async_graphql::*;
 use garde::Validate;
-use crate::graphql::context::{GraphQLContext, ContextExt};
 
-#[derive(Default)]
-pub struct Mutation;
-
-#[derive(Debug, Validate, InputObject)]
+#[derive(InputObject, Validate)]
 pub struct CreateNoteInput {
+    #[graphql(validator(min_length = 1, max_length = 200))]
     #[garde(length(min = 1, max = 200))]
-    title: String,
+    pub title: String,
     
+    #[graphql(validator(min_length = 1, max_length = 10000))]
     #[garde(length(min = 1, max = 10000))]
-    content: String,
+    pub content: String,
     
-    #[garde(length(min = 1, max = 100))]
-    author: String,
+    #[graphql(validator(max_items = 10))]
+    #[garde(length(max = 10))]
+    pub tags: Vec<String>,
 }
 
-#[derive(Debug, Validate, InputObject)]
+#[derive(InputObject, Validate)]
 pub struct UpdateNoteInput {
+    #[graphql(validator(min_length = 1, max_length = 200))]
     #[garde(length(min = 1, max = 200))]
-    title: Option<String>,
+    pub title: Option<String>,
     
+    #[graphql(validator(min_length = 1, max_length = 10000))]
     #[garde(length(min = 1, max = 10000))]
-    content: Option<String>,
+    pub content: Option<String>,
+    
+    #[graphql(validator(max_items = 10))]
+    #[garde(length(max = 10))]
+    pub tags: Option<Vec<String>>,
 }
+
+// Custom validation for input
+impl CreateNoteInput {
+    pub fn validate_and_sanitize(&mut self) -> Result<()> {
+        // Trim whitespace
+        self.title = self.title.trim().to_string();
+        self.content = self.content.trim().to_string();
+        
+        // Validate with Garde
+        self.validate()
+            .map_err(|e| Error::new(format!("Validation failed: {}", e)))?;
+        
+        // Additional business logic validation
+        if self.tags.iter().any(|tag| tag.len() > 50) {
+            return Err(Error::new("Tag length cannot exceed 50 characters"));
+        }
+        
+        Ok(())
+    }
+}
+```
+
+#### Task 3.3.3: Implement Mutation Resolvers
+Create mutation resolvers with proper authorization:
+```rust
+// src/graphql/mutation/mod.rs
+use async_graphql::*;
+use crate::graphql::context::ContextExt;
+
+pub mod inputs;
+use inputs::*;
+
+pub struct Mutation;
 
 #[Object]
 impl Mutation {
@@ -800,43 +887,35 @@ impl Mutation {
     async fn create_note(
         &self,
         ctx: &Context<'_>,
-        input: CreateNoteInput,
+        mut input: CreateNoteInput,
     ) -> Result<Note> {
-        let context = ctx.ctx()?;
+        let context = ctx.get_context()?;
+        let session = context.require_auth()?;
         
-        // Validate input
-        input.validate()
-            .map_err(|e| GraphQLError::from(e))?;
+        // Validate and sanitize input
+        input.validate_and_sanitize()?;
         
-        // Check authorization (in demo mode, allow all)
-        #[cfg(not(feature = "demo"))]
-        {
-            let session = context.require_auth()?;
-            // Additional permission checks here
-        }
-        
+        // Create note with author from session
         let note = Note {
-            id: None,
+            id: None, // Will be generated by database
             title: input.title,
             content: input.content,
-            author: input.author,
+            author: session.user_id.clone(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            tags: input.tags,
         };
         
         let id = context.database
             .create("notes", serde_json::to_value(&note)?)
-            .await
-            .map_err(|e| e.into())?;
+            .await?;
         
-        // Fetch created note
-        let created = context.database
-            .read("notes", &id)
-            .await
-            .map_err(|e| e.into())?
-            .ok_or_else(|| Error::new("Failed to fetch created note"))?;
+        // Emit event for subscriptions
+        if let Ok(broadcaster) = ctx.data::<EventBroadcaster>() {
+            broadcaster.send(DomainEvent::NoteCreated(note.clone())).await;
+        }
         
-        Ok(serde_json::from_value(created)?)
+        Ok(note.with_id(id))
     }
     
     /// Update an existing note
@@ -844,86 +923,79 @@ impl Mutation {
         &self,
         ctx: &Context<'_>,
         id: ID,
-        input: UpdateNoteInput,
+        mut input: UpdateNoteInput,
     ) -> Result<Note> {
-        let context = ctx.ctx()?;
-        
-        // Validate input
-        input.validate()
-            .map_err(|e| GraphQLError::from(e))?;
-        
-        // Check if at least one field is being updated
-        if input.title.is_none() && input.content.is_none() {
-            return Err(Error::new("At least one field must be updated"));
-        }
+        let context = ctx.get_context()?;
+        let session = context.require_auth()?;
         
         // Fetch existing note
         let existing = context.database
             .read("notes", &id.to_string())
-            .await
-            .map_err(|e| e.into())?
+            .await?
             .ok_or_else(|| Error::new("Note not found"))?;
         
         let mut note: Note = serde_json::from_value(existing)?;
         
-        // Check authorization
-        #[cfg(not(feature = "demo"))]
-        {
-            let session = context.require_auth()?;
-            if session.user_id != note.author {
-                return Err(Error::new("Not authorized to update this note"));
-            }
+        // Check authorization - users can only update their own notes
+        if note.author != session.user_id {
+            return Err(Error::new("Unauthorized to update this note")
+                .extend_with(|_, e| e.set("code", "FORBIDDEN")));
         }
         
         // Apply updates
         if let Some(title) = input.title {
-            note.title = title;
+            note.title = title.trim().to_string();
         }
         if let Some(content) = input.content {
-            note.content = content;
+            note.content = content.trim().to_string();
+        }
+        if let Some(tags) = input.tags {
+            note.tags = tags;
         }
         note.updated_at = chrono::Utc::now();
         
         // Save to database
         context.database
             .update("notes", &id.to_string(), serde_json::to_value(&note)?)
-            .await
-            .map_err(|e| e.into())?;
+            .await?;
+        
+        // Emit event
+        if let Ok(broadcaster) = ctx.data::<EventBroadcaster>() {
+            broadcaster.send(DomainEvent::NoteUpdated {
+                old: note.clone(),
+                new: note.clone(),
+            }).await;
+        }
         
         Ok(note)
     }
     
     /// Delete a note
-    async fn delete_note(
-        &self,
-        ctx: &Context<'_>,
-        id: ID,
-    ) -> Result<bool> {
-        let context = ctx.ctx()?;
+    async fn delete_note(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
+        let context = ctx.get_context()?;
+        let session = context.require_auth()?;
         
         // Fetch note to check ownership
         let existing = context.database
             .read("notes", &id.to_string())
-            .await
-            .map_err(|e| e.into())?
+            .await?
             .ok_or_else(|| Error::new("Note not found"))?;
         
         let note: Note = serde_json::from_value(existing)?;
         
         // Check authorization
-        #[cfg(not(feature = "demo"))]
-        {
-            let session = context.require_auth()?;
-            if session.user_id != note.author {
-                return Err(Error::new("Not authorized to delete this note"));
-            }
+        if note.author != session.user_id {
+            return Err(Error::new("Unauthorized to delete this note")
+                .extend_with(|_, e| e.set("code", "FORBIDDEN")));
         }
         
         // Delete from database
-        context.database
-            .delete("notes", &id.to_string())
-            .await
-            .map_err(|e| e.into())?;
+        context.database.delete("notes", &id.to_string()).await?;
+        
+        // Emit event
+        if let Ok(broadcaster) = ctx.data::<EventBroadcaster>() {
+            broadcaster.send(DomainEvent::NoteDeleted(id.to_string())).await;
+        }
         
         Ok(true)
     }
@@ -931,46 +1003,37 @@ impl Mutation {
 ```
 
 ---
-## 🛑 CHECKPOINT 2: Query and Mutation Resolvers Review
+## 🛑 CHECKPOINT 3: Mutation Implementation Review
 
 **STOP HERE FOR EXTERNAL REVIEW**
 
-**Before requesting review, ensure you have:**
-1. Implemented all query resolvers (note, notes, notesByAuthor, searchNotes, health)
-2. Created pagination with connection types
-3. Implemented all mutations (createNote, updateNote, deleteNote)
-4. Added input validation with Garde
-5. Included authorization checks (skipped in demo mode)
-6. Written comprehensive tests for all operations
-7. Added proper error handling and messages
-8. Documented all GraphQL operations
-9. Committed all work with message: "Checkpoint 2: Query and mutation resolvers complete"
+**Before requesting review:**
+1. Test all mutations with valid and invalid inputs
+2. Verify authorization checks work correctly
+3. Check input validation and sanitization
+4. Ensure events are emitted for subscriptions
+5. Write any questions to `api/.claude/.reviews/checkpoint-3-questions.md`
+6. Commit with message: "Checkpoint 3: Mutation resolvers complete"
 
-**Request review by providing:**
-- Link to this checkpoint in WORK_PLAN.md
-- Link to REVIEW_PLAN.md section for Checkpoint 2
-- Your git commit hash
-- GraphQL playground showing working queries/mutations
-
-**DO NOT PROCEED** until you receive explicit approval.
+**DO NOT PROCEED** until review is complete and approved.
 
 ---
 
-### 3.4 Subscription Implementation (3-4 work units)
+### 3.4 Subscriptions & WebSocket (3-4 work units)
 
 **Work Unit Context:**
-- **Complexity**: High - WebSocket handling and event streaming
-- **Scope**: ~700 lines across 4-5 files
+- **Complexity**: High - Real-time event streaming over WebSocket
+- **Scope**: Target 600-800 lines across 5-6 files (MUST document justification if outside range)
 - **Key Components**:
-  - Subscription root type (~150 lines)
-  - WebSocket transport setup (~200 lines)
+  - WebSocket protocol handling (~200 lines)
+  - Subscription resolvers (~150 lines)
   - Event broadcasting system (~200 lines)
-  - Connection management (~100 lines)
-  - Subscription tests (~150 lines)
-- **Algorithms**: Pub/sub pattern, connection pooling, event filtering
+  - Connection lifecycle management (~150 lines)
+  - Subscription filtering logic (~100 lines)
+- **Required Algorithms**: MUST implement pub/sub pattern, connection cleanup
 
 #### Task 3.4.1: Write Subscription Tests First
-Create tests for real-time subscriptions:
+Test WebSocket subscriptions:
 ```rust
 #[cfg(test)]
 mod subscription_tests {
@@ -979,11 +1042,9 @@ mod subscription_tests {
     
     #[tokio::test]
     async fn test_note_created_subscription() {
-        let schema = create_test_schema().await;
-        
-        // Start subscription
+        let schema = create_test_schema();
         let subscription = r#"
-            subscription {
+            subscription OnNoteCreated {
                 noteCreated {
                     id
                     title
@@ -992,317 +1053,344 @@ mod subscription_tests {
             }
         "#;
         
+        // Create subscription stream
         let mut stream = schema.execute_stream(subscription);
         
-        // Create a note in another task
-        let schema_clone = schema.clone();
+        // Trigger event in another task
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
-            
-            let mutation = r#"
-                mutation {
-                    createNote(input: {
-                        title: "Subscription Test"
-                        content: "Testing subscriptions"
-                        author: "test_user"
-                    }) {
-                        id
-                    }
-                }
-            "#;
-            
-            schema_clone.execute(mutation).await;
+            // Create a note which should trigger the subscription
+            create_test_note().await;
         });
         
-        // Receive subscription event
-        let result = tokio::time::timeout(
-            Duration::from_secs(1),
-            stream.next()
-        ).await;
-        
-        assert!(result.is_ok());
-        let response = result.unwrap().unwrap();
-        let data = response.data.into_json().unwrap();
-        assert_eq!(data["noteCreated"]["title"], "Subscription Test");
+        // Receive event
+        let response = stream.next().await.unwrap();
+        assert!(response.errors.is_empty());
+        assert!(response.data.is_ok());
     }
     
     #[tokio::test]
-    async fn test_note_updated_subscription_with_filter() {
-        let schema = create_test_schema().await;
-        let note_id = create_test_note(&schema).await;
-        
-        // Subscribe to updates for specific note
-        let subscription = format!(r#"
-            subscription {{
-                noteUpdated(id: "{}") {{
+    async fn test_filtered_subscription() {
+        let schema = create_test_schema();
+        let subscription = r#"
+            subscription OnAuthorNotes($author: String!) {
+                notesByAuthor(author: $author) {
                     id
                     title
-                    updatedAt
-                }}
-            }}
-        "#, note_id);
+                    author
+                }
+            }
+        "#;
         
-        let mut stream = schema.execute_stream(subscription);
-        
-        // Update the note
-        let schema_clone = schema.clone();
-        let note_id_clone = note_id.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            
-            let mutation = format!(r#"
-                mutation {{
-                    updateNote(id: "{}", input: {{
-                        title: "Updated via subscription"
-                    }}) {{
-                        id
-                    }}
-                }}
-            "#, note_id_clone);
-            
-            schema_clone.execute(mutation).await;
+        let variables = serde_json::json!({
+            "author": "test_user"
         });
         
-        // Should receive update event
-        let result = tokio::time::timeout(
-            Duration::from_secs(1),
-            stream.next()
-        ).await;
+        let request = Request::new(subscription).variables(variables);
+        let mut stream = schema.execute_stream(request);
         
-        assert!(result.is_ok());
-        let response = result.unwrap().unwrap();
-        let data = response.data.into_json().unwrap();
-        assert_eq!(data["noteUpdated"]["title"], "Updated via subscription");
+        // Should only receive events for specific author
+        // Test implementation...
     }
 }
 ```
 
 #### Task 3.4.2: Implement Event Broadcasting
-Create pub/sub system for events:
+Create event broadcasting system:
 ```rust
-// src/graphql/subscriptions/broadcaster.rs
+// src/graphql/subscription/broadcaster.rs
 use tokio::sync::broadcast;
 use std::sync::Arc;
+use parking_lot::RwLock;
 
 #[derive(Debug, Clone)]
-pub enum NoteEvent {
-    Created(Note),
-    Updated(Note),
-    Deleted(String), // Note ID
+pub enum DomainEvent {
+    NoteCreated(Note),
+    NoteUpdated { old: Note, new: Note },
+    NoteDeleted(String),
 }
 
 pub struct EventBroadcaster {
-    sender: broadcast::Sender<NoteEvent>,
+    sender: broadcast::Sender<DomainEvent>,
+    capacity: usize,
+    subscriber_count: Arc<RwLock<usize>>,
 }
 
 impl EventBroadcaster {
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
+        Self {
+            sender,
+            capacity,
+            subscriber_count: Arc::new(RwLock::new(0)),
+        }
     }
     
-    pub fn subscribe(&self) -> broadcast::Receiver<NoteEvent> {
+    /// Send an event to all subscribers
+    pub async fn send(&self, event: DomainEvent) {
+        let subscriber_count = *self.subscriber_count.read();
+        
+        if subscriber_count > 0 {
+            // Only send if there are active subscribers
+            match self.sender.send(event) {
+                Ok(count) => {
+                    tracing::debug!("Event sent to {} subscribers", count);
+                }
+                Err(_) => {
+                    tracing::warn!("No active subscribers for event");
+                }
+            }
+        }
+    }
+    
+    /// Subscribe to events
+    pub fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
+        *self.subscriber_count.write() += 1;
         self.sender.subscribe()
     }
     
-    pub fn broadcast(&self, event: NoteEvent) -> Result<()> {
-        self.sender.send(event)
-            .map_err(|_| Error::new("No active subscribers"))?;
-        Ok(())
-    }
-    
-    pub fn active_receivers(&self) -> usize {
-        self.sender.receiver_count()
+    /// Get current subscriber count
+    pub fn subscriber_count(&self) -> usize {
+        *self.subscriber_count.read()
     }
 }
 
-// Add to GraphQL context
-impl GraphQLContext {
-    pub fn broadcaster(&self) -> &EventBroadcaster {
-        &self.broadcaster
+// Implement Drop to track subscriber lifecycle
+impl Drop for EventSubscription {
+    fn drop(&mut self) {
+        if let Some(counter) = self.counter.upgrade() {
+            *counter.write() -= 1;
+        }
     }
 }
 ```
 
-#### Task 3.4.3: Implement Subscription Root Type
-Create subscription resolvers:
+#### Task 3.4.3: Implement Subscription Resolvers
+Create subscription resolvers with filtering:
 ```rust
-// src/graphql/resolvers/subscriptions.rs
+// src/graphql/subscription/mod.rs
 use async_graphql::*;
-use futures_util::Stream;
-use tokio_stream::StreamExt;
+use futures_util::{Stream, StreamExt};
+use crate::graphql::context::ContextExt;
 
-#[derive(Default)]
+pub mod broadcaster;
+use broadcaster::*;
+
 pub struct Subscription;
 
 #[Subscription]
 impl Subscription {
-    /// Subscribe to new notes
+    /// Subscribe to all note creation events
     async fn note_created(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = Note>> {
-        let context = ctx.ctx()?;
+        let context = ctx.get_context()?;
+        context.require_auth()?;
         
-        // Check subscription limits
-        if context.broadcaster().active_receivers() >= MAX_SUBSCRIPTIONS_PER_INSTANCE {
-            return Err(Error::new("Subscription limit reached"));
-        }
-        
-        let mut receiver = context.broadcaster().subscribe();
+        let broadcaster = ctx.data::<EventBroadcaster>()?;
+        let mut receiver = broadcaster.subscribe();
         
         Ok(async_stream::stream! {
             while let Ok(event) = receiver.recv().await {
-                if let NoteEvent::Created(note) = event {
+                if let DomainEvent::NoteCreated(note) = event {
                     yield note;
                 }
             }
         })
     }
     
-    /// Subscribe to updates on a specific note or all notes
-    async fn note_updated(
+    /// Subscribe to note updates
+    async fn note_updated(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = NoteUpdate>> {
+        let context = ctx.get_context()?;
+        context.require_auth()?;
+        
+        let broadcaster = ctx.data::<EventBroadcaster>()?;
+        let mut receiver = broadcaster.subscribe();
+        
+        Ok(async_stream::stream! {
+            while let Ok(event) = receiver.recv().await {
+                if let DomainEvent::NoteUpdated { old, new } = event {
+                    yield NoteUpdate { old, new };
+                }
+            }
+        })
+    }
+    
+    /// Subscribe to notes by specific author
+    async fn notes_by_author(
         &self,
         ctx: &Context<'_>,
-        id: Option<ID>,
-    ) -> Result<impl Stream<Item = Note>> {
-        let context = ctx.ctx()?;
+        author: String,
+    ) -> Result<impl Stream<Item = NoteEvent>> {
+        let context = ctx.get_context()?;
+        let session = context.require_auth()?;
         
-        let filter_id = id.map(|id| id.to_string());
-        let mut receiver = context.broadcaster().subscribe();
+        // Users can only subscribe to their own notes unless admin
+        if author != session.user_id && !session.is_admin {
+            return Err(Error::new("Unauthorized to subscribe to other users' notes"));
+        }
+        
+        let broadcaster = ctx.data::<EventBroadcaster>()?;
+        let mut receiver = broadcaster.subscribe();
         
         Ok(async_stream::stream! {
             while let Ok(event) = receiver.recv().await {
-                if let NoteEvent::Updated(note) = event {
-                    // Apply filter if ID provided
-                    if let Some(ref filter) = filter_id {
-                        if note.id.as_ref().map(|id| id.to_string()) == Some(filter.clone()) {
-                            yield note;
-                        }
-                    } else {
-                        yield note;
+                let note_event = match event {
+                    DomainEvent::NoteCreated(note) if note.author == author => {
+                        Some(NoteEvent::Created(note))
                     }
-                }
-            }
-        })
-    }
-    
-    /// Subscribe to note deletions
-    async fn note_deleted(&self, ctx: &Context<'_>) -> Result<impl Stream<Item = String>> {
-        let context = ctx.ctx()?;
-        
-        let mut receiver = context.broadcaster().subscribe();
-        
-        Ok(async_stream::stream! {
-            while let Ok(event) = receiver.recv().await {
-                if let NoteEvent::Deleted(id) = event {
-                    yield id;
+                    DomainEvent::NoteUpdated { old, new } if new.author == author => {
+                        Some(NoteEvent::Updated(NoteUpdate { old, new }))
+                    }
+                    DomainEvent::NoteDeleted(id) => {
+                        // Need to check if this was authored by target user
+                        Some(NoteEvent::Deleted(id))
+                    }
+                    _ => None,
+                };
+                
+                if let Some(event) = note_event {
+                    yield event;
                 }
             }
         })
     }
 }
 
-// Update mutations to broadcast events
-impl Mutation {
-    // In create_note, after successful creation:
-    context.broadcaster().broadcast(NoteEvent::Created(created_note.clone()))?;
-    
-    // In update_note, after successful update:
-    context.broadcaster().broadcast(NoteEvent::Updated(updated_note.clone()))?;
-    
-    // In delete_note, after successful deletion:
-    context.broadcaster().broadcast(NoteEvent::Deleted(id.to_string()))?;
+#[derive(SimpleObject)]
+pub struct NoteUpdate {
+    pub old: Note,
+    pub new: Note,
+}
+
+#[derive(Union)]
+pub enum NoteEvent {
+    Created(Note),
+    Updated(NoteUpdate),
+    Deleted(String),
 }
 ```
 
-#### Task 3.4.4: Set Up WebSocket Transport
-Configure WebSocket for subscriptions:
+#### Task 3.4.4: Add WebSocket Protocol Support
+Integrate WebSocket with Axum:
 ```rust
-// src/graphql/transport.rs
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
+// src/graphql/websocket.rs
 use axum::{
-    extract::{WebSocketUpgrade, State},
-    response::{Html, IntoResponse},
-    routing::get,
-    Router,
+    extract::{ws::{WebSocket, WebSocketUpgrade}, State},
+    response::Response,
 };
+use async_graphql::{Data, Schema};
+use async_graphql_axum::GraphQLProtocol;
+use futures_util::{SinkExt, StreamExt};
 
-pub fn graphql_routes(schema: AppSchema) -> Router {
-    Router::new()
-        .route("/graphql", get(graphql_playground).post(graphql_handler))
-        .route("/graphql/ws", get(graphql_ws_handler))
-        .route("/schema", get(schema_handler))
-        .with_state(schema)
-}
-
-async fn graphql_playground() -> impl IntoResponse {
-    // Only available in demo mode
-    if !is_demo_mode() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    
-    Html(playground_source(
-        GraphQLPlaygroundConfig::new("/graphql")
-            .subscription_endpoint("/graphql/ws")
-    ))
-}
-
-async fn graphql_handler(
-    State(schema): State<AppSchema>,
-    headers: HeaderMap,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
-    let mut request = req.into_inner();
-    
-    // Create context from request
-    let context = create_context_from_request(&headers).await;
-    request = request.data(context);
-    
-    schema.execute(request).await.into()
-}
-
-async fn graphql_ws_handler(
-    State(schema): State<AppSchema>,
-    headers: HeaderMap,
+pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-) -> impl IntoResponse {
-    let context = create_context_from_request(&headers).await;
-    
-    ws.protocols(["graphql-ws"])
-        .on_upgrade(move |socket| {
-            GraphQLSubscription::new(socket)
-                .on_connection_init(|_| async {
-                    Ok(context)
-                })
-                .serve(schema)
-                .await
-        })
+    protocol: GraphQLProtocol,
+    State(schema): State<AppSchema>,
+    Extension(session): Extension<Option<Session>>,
+) -> Response {
+    ws.protocols(["graphql-ws", "graphql-transport-ws"])
+        .on_upgrade(move |socket| handle_websocket(socket, schema, protocol, session))
 }
 
-async fn schema_handler(State(schema): State<AppSchema>) -> impl IntoResponse {
-    // Only available in demo mode
-    if !is_demo_mode() {
-        return StatusCode::NOT_FOUND.into_response();
+async fn handle_websocket(
+    socket: WebSocket,
+    schema: AppSchema,
+    protocol: GraphQLProtocol,
+    session: Option<Session>,
+) {
+    let (sink, stream) = socket.split();
+    
+    // Create context for WebSocket connection
+    let context = GraphQLContext::new(
+        schema.data::<Arc<dyn DatabaseService>>().unwrap().clone(),
+        session,
+        uuid::Uuid::new_v4().to_string(),
+    );
+    
+    // Handle the GraphQL WebSocket protocol
+    let output = async_graphql_axum::GraphQLWebSocket::new(schema.clone(), stream, protocol)
+        .on_connection_init(|value| async move {
+            // Validate connection parameters if needed
+            Ok(Data::default())
+        })
+        .stream();
+    
+    // Forward messages
+    output
+        .map(|msg| match msg {
+            Ok(msg) => Ok(msg.into()),
+            Err(err) => {
+                tracing::error!("WebSocket error: {}", err);
+                Err(axum::Error::new(err))
+            }
+        })
+        .forward(sink)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!("WebSocket forward error: {}", e);
+        });
+}
+
+// Add connection limiting middleware
+pub struct ConnectionLimiter {
+    max_connections: usize,
+    current_connections: Arc<AtomicUsize>,
+}
+
+impl ConnectionLimiter {
+    pub fn new(max_connections: usize) -> Self {
+        Self {
+            max_connections,
+            current_connections: Arc::new(AtomicUsize::new(0)),
+        }
     }
     
-    schema.sdl()
+    pub fn check_limit(&self) -> Result<ConnectionGuard> {
+        let current = self.current_connections.fetch_add(1, Ordering::Relaxed);
+        
+        if current >= self.max_connections {
+            self.current_connections.fetch_sub(1, Ordering::Relaxed);
+            Err(Error::new("Maximum subscription connections reached"))
+        } else {
+            Ok(ConnectionGuard {
+                counter: self.current_connections.clone(),
+            })
+        }
+    }
 }
 ```
 
-### 3.5 Security & Performance (2-3 work units)
+---
+## 🛑 CHECKPOINT 4: Subscription Implementation Review
+
+**STOP HERE FOR EXTERNAL REVIEW**
+
+**Before requesting review:**
+1. Test WebSocket connections work properly
+2. Verify subscriptions receive real-time events
+3. Check connection limits are enforced
+4. Test subscription filtering logic
+5. Write any questions to `api/.claude/.reviews/checkpoint-4-questions.md`
+6. Commit with message: "Checkpoint 4: Subscriptions complete"
+
+**DO NOT PROCEED** until review is complete and approved.
+
+---
+
+### 3.5 Security Controls & Complete Integration (2-3 work units)
 
 **Work Unit Context:**
-- **Complexity**: High - Complex security validations and performance optimizations
-- **Scope**: ~600 lines across 4-5 files
+- **Complexity**: Medium - Security hardening and final integration
+- **Scope**: Target 500-600 lines across 4-5 files (MUST document justification if outside range)
 - **Key Components**:
-  - Query depth limiting (~150 lines)
-  - Complexity calculation (~150 lines)
-  - DataLoader implementation (~200 lines)
-  - Rate limiting (~100 lines)
-  - Security tests (~100 lines)
-- **Algorithms**: Tree traversal for depth, cost calculation, batch loading
+  - Query depth/complexity limiting (~150 lines)
+  - Rate limiting implementation (~100 lines)
+  - Metrics integration (~100 lines)
+  - Complete integration tests (~150 lines)
+  - Verification scripts (~100 lines)
+- **Patterns**: Visitor pattern for query analysis, middleware integration
 
 #### Task 3.5.1: Write Security Tests First
-Test depth and complexity limits:
+Test all security controls:
 ```rust
 #[cfg(test)]
 mod security_tests {
@@ -1310,18 +1398,36 @@ mod security_tests {
     
     #[tokio::test]
     async fn test_query_depth_limit() {
-        let schema = create_schema_with_limits(5, 1000);
+        let schema = create_test_schema();
         
-        // Query with depth 6 (should fail)
-        let deep_query = r#"
-            query {
+        // Create deeply nested query exceeding limit
+        let query = r#"
+            query DeeplyNested {
                 notes {
                     edges {
                         node {
-                            relatedNotes {
-                                edges {
-                                    node {
-                                        title
+                            author {
+                                notes {
+                                    edges {
+                                        node {
+                                            author {
+                                                notes {
+                                                    edges {
+                                                        node {
+                                                            author {
+                                                                notes {
+                                                                    edges {
+                                                                        node {
+                                                                            id
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1331,65 +1437,47 @@ mod security_tests {
             }
         "#;
         
-        let result = schema.execute(deep_query).await;
-        assert!(result.errors.len() > 0);
-        assert!(result.errors[0].message.contains("depth"));
+        let response = schema.execute(query).await;
+        assert!(!response.errors.is_empty());
+        assert!(response.errors[0].message.contains("depth"));
     }
     
     #[tokio::test]
     async fn test_query_complexity_limit() {
-        let schema = create_schema_with_limits(15, 100);
+        let schema = create_test_schema();
         
-        // Query requesting 101 items (complexity > 100)
-        let complex_query = r#"
-            query {
-                notes(limit: 101) {
-                    edges {
-                        node {
-                            id
-                            title
-                            content
-                        }
-                    }
-                }
+        // Create query with high complexity
+        let query = r#"
+            query ComplexQuery {
+                n1: notes(first: 100) { edges { node { id } } }
+                n2: notes(first: 100) { edges { node { id } } }
+                n3: notes(first: 100) { edges { node { id } } }
+                n4: notes(first: 100) { edges { node { id } } }
+                n5: notes(first: 100) { edges { node { id } } }
+                n6: notes(first: 100) { edges { node { id } } }
+                n7: notes(first: 100) { edges { node { id } } }
+                n8: notes(first: 100) { edges { node { id } } }
+                n9: notes(first: 100) { edges { node { id } } }
+                n10: notes(first: 100) { edges { node { id } } }
             }
         "#;
         
-        let result = schema.execute(complex_query).await;
-        assert!(result.errors.len() > 0);
-        assert!(result.errors[0].message.contains("complexity"));
-    }
-    
-    #[tokio::test]
-    async fn test_introspection_disabled_in_production() {
-        std::env::set_var("ENVIRONMENT", "production");
-        let schema = create_schema();
-        
-        let introspection_query = r#"
-            query {
-                __schema {
-                    types {
-                        name
-                    }
-                }
-            }
-        "#;
-        
-        let result = schema.execute(introspection_query).await;
-        assert!(result.errors.len() > 0);
-        
-        std::env::remove_var("ENVIRONMENT");
+        let response = schema.execute(query).await;
+        assert!(!response.errors.is_empty());
+        assert!(response.errors[0].message.contains("complexity"));
     }
 }
 ```
 
-#### Task 3.5.2: Implement Query Depth Limiting
-Add custom depth limiter:
+#### Task 3.5.2: Implement Security Extensions
+Add query depth and complexity limiting:
 ```rust
-// src/graphql/security/depth.rs
-use async_graphql::{ValidationResult, Visitor, VisitorContext};
+// src/graphql/security/mod.rs
+use async_graphql::extensions::*;
 use async_graphql::parser::types::*;
+use async_graphql::*;
 
+/// Extension to limit query depth
 pub struct DepthLimit {
     max_depth: usize,
 }
@@ -1400,623 +1488,331 @@ impl DepthLimit {
     }
 }
 
-impl Visitor for DepthLimit {
-    fn enter_field(
-        &mut self,
-        ctx: &mut VisitorContext<'_>,
-        field: &Field,
-    ) -> Result<(), String> {
-        let depth = ctx.field_stack.len();
+#[async_trait::async_trait]
+impl Extension for DepthLimit {
+    async fn parse_query(
+        &self,
+        ctx: &ExtensionContext<'_>,
+        query: &str,
+        variables: &Variables,
+        next: NextParseQuery<'_>,
+    ) -> ServerResult<ExecutableDocument> {
+        let doc = next.run(ctx, query, variables).await?;
+        
+        // Calculate depth
+        let depth = calculate_query_depth(&doc);
         
         if depth > self.max_depth {
-            ctx.report_error(
-                vec![field.pos],
+            return Err(ServerError::new(
                 format!(
-                    "Query depth of {} exceeds maximum allowed depth of {}",
+                    "Query depth {} exceeds maximum allowed depth of {}",
                     depth, self.max_depth
                 ),
-            );
+                None,
+            ));
         }
         
-        Ok(())
+        Ok(doc)
     }
 }
 
-// Add to schema builder
-builder = builder.validation_mode(ValidationMode::Custom(Box::new(DepthLimit::new(15))));
-```
-
-#### Task 3.5.3: Implement Complexity Calculation
-Calculate query complexity:
-```rust
-// src/graphql/security/complexity.rs
-#[derive(Debug)]
-pub struct ComplexityCalculator {
+/// Extension to limit query complexity
+pub struct ComplexityLimit {
     max_complexity: usize,
-    current_complexity: usize,
 }
 
-impl ComplexityCalculator {
+impl ComplexityLimit {
     pub fn new(max_complexity: usize) -> Self {
-        Self {
-            max_complexity,
-            current_complexity: 0,
-        }
+        Self { max_complexity }
     }
-    
-    pub fn add_field_cost(&mut self, cost: usize) -> Result<(), String> {
-        self.current_complexity += cost;
-        
-        if self.current_complexity > self.max_complexity {
-            Err(format!(
-                "Query complexity of {} exceeds maximum allowed complexity of {}",
-                self.current_complexity, self.max_complexity
-            ))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-// Field complexity definitions
-impl Query {
-    #[graphql(complexity = "1")]
-    async fn note(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Note>> {
-        // ...
-    }
-    
-    #[graphql(complexity = "limit.unwrap_or(10) as usize")]
-    async fn notes(&self, ctx: &Context<'_>, limit: Option<i32>) -> Result<NotesConnection> {
-        // ...
-    }
-    
-    #[graphql(complexity = "50")] // Expensive search operation
-    async fn search_notes(&self, ctx: &Context<'_>, query: String) -> Result<Vec<Note>> {
-        // ...
-    }
-}
-```
-
-#### Task 3.5.4: Implement DataLoader
-Prevent N+1 queries with batch loading:
-```rust
-// src/graphql/dataloaders/note_loader.rs
-use async_graphql::dataloader::{DataLoader, Loader};
-use std::collections::HashMap;
-
-pub struct NoteLoader {
-    database: Arc<dyn DatabaseService>,
 }
 
 #[async_trait::async_trait]
-impl Loader<String> for NoteLoader {
-    type Value = Note;
-    type Error = Arc<AppError>;
-    
-    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
-        // Batch load notes
-        let query = Query::new()
-            .filter("id IN $ids")
-            .bind("ids", keys);
-            
-        let notes = self.database
-            .query("notes", query)
-            .await
-            .map_err(|e| Arc::new(e.into()))?;
+impl Extension for ComplexityLimit {
+    async fn parse_query(
+        &self,
+        ctx: &ExtensionContext<'_>,
+        query: &str,
+        variables: &Variables,
+        next: NextParseQuery<'_>,
+    ) -> ServerResult<ExecutableDocument> {
+        let doc = next.run(ctx, query, variables).await?;
         
-        // Convert to HashMap for DataLoader
-        let map: HashMap<String, Note> = notes
-            .into_iter()
-            .map(|value| {
-                let note: Note = serde_json::from_value(value).unwrap();
-                (note.id.clone().unwrap().to_string(), note)
-            })
-            .collect();
+        // Calculate complexity
+        let complexity = calculate_query_complexity(&doc, variables);
         
-        Ok(map)
+        if complexity > self.max_complexity {
+            return Err(ServerError::new(
+                format!(
+                    "Query complexity {} exceeds maximum allowed complexity of {}",
+                    complexity, self.max_complexity
+                ),
+                None,
+            ));
+        }
+        
+        Ok(doc)
     }
 }
 
-// Add to context
-impl GraphQLContext {
-    pub fn note_loader(&self) -> &DataLoader<NoteLoader> {
-        &self.note_loader
-    }
+fn calculate_query_depth(doc: &ExecutableDocument) -> usize {
+    // Implementation using visitor pattern
+    // Traverse the query AST and calculate maximum depth
+    let mut visitor = DepthCalculator { max_depth: 0, current_depth: 0 };
+    visit_document(&mut visitor, doc);
+    visitor.max_depth
 }
 
-// Use in resolvers
-impl Query {
-    async fn note(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Note>> {
-        let context = ctx.ctx()?;
-        
-        // Use DataLoader instead of direct database access
-        context.note_loader()
-            .load_one(id.to_string())
-            .await
-            .map_err(|e| e.into())
-    }
+fn calculate_query_complexity(doc: &ExecutableDocument, variables: &Variables) -> usize {
+    // Calculate complexity based on:
+    // - Number of fields
+    // - List sizes (first/last arguments)
+    // - Nested selections
+    let mut visitor = ComplexityCalculator { 
+        total_complexity: 0,
+        variables,
+    };
+    visit_document(&mut visitor, doc);
+    visitor.total_complexity
 }
 ```
 
----
-## 🛑 CHECKPOINT 3: Subscriptions and Security Review
-
-**STOP HERE FOR EXTERNAL REVIEW**
-
-**Before requesting review, ensure you have:**
-1. Implemented all subscription types (noteCreated, noteUpdated, noteDeleted)
-2. Created event broadcasting system
-3. Set up WebSocket transport
-4. Added query depth limiting (default: 15)
-5. Implemented complexity calculation (default: 1000)
-6. Created DataLoader for N+1 prevention
-7. Disabled introspection in production
-8. Written comprehensive security tests
-9. Committed all work with message: "Checkpoint 3: Subscriptions and security complete"
-
-**Request review by providing:**
-- Link to this checkpoint in WORK_PLAN.md
-- Link to REVIEW_PLAN.md section for Checkpoint 3
-- Your git commit hash
-- Demonstration of working subscriptions
-- Evidence of security limits working
-
-**DO NOT PROCEED** until you receive explicit approval.
-
----
-
-### 3.6 Integration & Metrics (2 work units)
-
-**Work Unit Context:**
-- **Complexity**: Medium - Integrating all components
-- **Scope**: ~400 lines across 3-4 files
-- **Key Components**:
-  - GraphQL route integration (~100 lines)
-  - Metrics collection (~150 lines)
-  - Integration tests (~100 lines)
-  - Documentation updates (~50 lines)
-- **No complex algorithms** - Just integration and metrics
-
-#### Task 3.6.1: Write Integration Tests
-Test complete GraphQL system:
-```rust
-// tests/graphql_integration.rs
-#[tokio::test]
-async fn test_complete_graphql_flow() {
-    let app = create_test_app().await;
-    
-    // Create a note
-    let create_response = app
-        .post("/graphql")
-        .json(&json!({
-            "query": r#"
-                mutation {
-                    createNote(input: {
-                        title: "Integration Test"
-                        content: "Testing complete flow"
-                        author: "test_user"
-                    }) {
-                        id
-                        title
-                    }
-                }
-            "#
-        }))
-        .send()
-        .await;
-    
-    assert_eq!(create_response.status(), 200);
-    let data: serde_json::Value = create_response.json().await;
-    let note_id = data["data"]["createNote"]["id"].as_str().unwrap();
-    
-    // Query the note
-    let query_response = app
-        .post("/graphql")
-        .json(&json!({
-            "query": format!(r#"
-                query {{
-                    note(id: "{}") {{
-                        title
-                        content
-                    }}
-                }}
-            "#, note_id)
-        }))
-        .send()
-        .await;
-    
-    assert_eq!(query_response.status(), 200);
-    
-    // Update the note
-    let update_response = app
-        .post("/graphql")
-        .json(&json!({
-            "query": format!(r#"
-                mutation {{
-                    updateNote(id: "{}", input: {{
-                        title: "Updated Title"
-                    }}) {{
-                        title
-                        updatedAt
-                    }}
-                }}
-            "#, note_id)
-        }))
-        .send()
-        .await;
-    
-    assert_eq!(update_response.status(), 200);
-    
-    // Delete the note
-    let delete_response = app
-        .post("/graphql")
-        .json(&json!({
-            "query": format!(r#"
-                mutation {{
-                    deleteNote(id: "{}")
-                }}
-            "#, note_id)
-        }))
-        .send()
-        .await;
-    
-    assert_eq!(delete_response.status(), 200);
-}
-
-#[tokio::test]
-async fn test_graphql_metrics() {
-    let app = create_test_app().await;
-    
-    // Execute some queries
-    for _ in 0..5 {
-        app.post("/graphql")
-            .json(&json!({
-                "query": "query { health { status } }"
-            }))
-            .send()
-            .await;
-    }
-    
-    // Check metrics
-    let metrics_response = app.get("/metrics").send().await;
-    let metrics_body = metrics_response.text().await;
-    
-    assert!(metrics_body.contains("graphql_request_total"));
-    assert!(metrics_body.contains("graphql_request_duration_seconds"));
-    assert!(metrics_body.contains("graphql_field_resolution_duration_seconds"));
-}
-```
-
-#### Task 3.6.2: Add GraphQL Metrics
-Implement Prometheus metrics:
+#### Task 3.5.3: Add GraphQL Metrics
+Integrate metrics collection:
 ```rust
 // src/graphql/metrics.rs
-use prometheus::{
-    register_histogram_vec, register_int_counter_vec, register_int_gauge,
-    HistogramVec, IntCounterVec, IntGauge,
-};
+use async_graphql::extensions::*;
+use prometheus::{HistogramVec, IntCounterVec};
 
 lazy_static! {
-    static ref GRAPHQL_REQUEST_TOTAL: IntCounterVec = register_int_counter_vec!(
-        "graphql_request_total",
-        "Total number of GraphQL requests",
-        &["operation_type", "operation_name", "status"]
-    ).unwrap();
-    
     static ref GRAPHQL_REQUEST_DURATION: HistogramVec = register_histogram_vec!(
         "graphql_request_duration_seconds",
-        "GraphQL request duration in seconds",
+        "GraphQL request duration by operation type and name",
         &["operation_type", "operation_name"]
+    ).unwrap();
+    
+    static ref GRAPHQL_REQUEST_COUNT: IntCounterVec = register_int_counter_vec!(
+        "graphql_request_total",
+        "Total GraphQL requests by operation type",
+        &["operation_type", "status"]
     ).unwrap();
     
     static ref GRAPHQL_FIELD_DURATION: HistogramVec = register_histogram_vec!(
         "graphql_field_resolution_duration_seconds",
-        "GraphQL field resolution duration in seconds",
-        &["type_name", "field_name"]
-    ).unwrap();
-    
-    static ref GRAPHQL_ACTIVE_SUBSCRIPTIONS: IntGauge = register_int_gauge!(
-        "graphql_active_subscriptions",
-        "Number of active GraphQL subscriptions"
+        "Field resolution duration",
+        &["parent_type", "field_name"]
     ).unwrap();
 }
 
-// Metrics extension
 pub struct MetricsExtension;
 
 #[async_trait::async_trait]
 impl Extension for MetricsExtension {
-    async fn request(&self, ctx: &ExtensionContext<'_>, next: NextRequest<'_>) -> Response {
-        let operation_type = ctx.operation_type.to_string();
-        let operation_name = ctx.operation_name.unwrap_or("unnamed");
+    async fn execute(
+        &self,
+        ctx: &ExtensionContext<'_>,
+        operation_name: Option<&str>,
+        next: NextExecute<'_>,
+    ) -> Response {
+        let operation_type = ctx.data::<OperationType>()
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
         
         let timer = GRAPHQL_REQUEST_DURATION
-            .with_label_values(&[&operation_type, operation_name])
+            .with_label_values(&[
+                &operation_type,
+                operation_name.unwrap_or("anonymous"),
+            ])
             .start_timer();
         
-        let response = next.run(ctx).await;
-        
+        let response = next.run(ctx, operation_name).await;
         timer.observe_duration();
         
-        let status = if response.is_err() { "error" } else { "success" };
-        GRAPHQL_REQUEST_TOTAL
-            .with_label_values(&[&operation_type, operation_name, status])
+        let status = if response.errors.is_empty() { "success" } else { "error" };
+        GRAPHQL_REQUEST_COUNT
+            .with_label_values(&[&operation_type, status])
             .inc();
         
         response
     }
+    
+    async fn resolve(
+        &self,
+        ctx: &ExtensionContext<'_>,
+        info: ResolveInfo<'_>,
+        next: NextResolve<'_>,
+    ) -> ServerResult<Option<Value>> {
+        let timer = GRAPHQL_FIELD_DURATION
+            .with_label_values(&[
+                info.parent_type.name(),
+                info.field_name,
+            ])
+            .start_timer();
+        
+        let result = next.run(ctx, info).await;
+        timer.observe_duration();
+        
+        result
+    }
 }
 ```
 
-#### Task 3.6.3: Integrate with Main Server
-Add GraphQL to the main application:
+#### Task 3.5.4: Complete Integration
+Wire everything together:
 ```rust
-// In src/main.rs
-use crate::graphql::{create_schema, graphql_routes};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // ... existing initialization ...
-    
-    // Create GraphQL schema
-    let schema = create_schema()
+// Update src/graphql/mod.rs
+pub fn create_schema_with_extensions(
+    database: Arc<dyn DatabaseService>,
+    broadcaster: EventBroadcaster,
+    config: GraphQLConfig,
+) -> AppSchema {
+    let mut builder = Schema::build(Query, Mutation, Subscription)
         .data(database.clone())
-        .data(event_broadcaster)
-        .extension(MetricsExtension)
-        .finish();
+        .data(broadcaster)
+        .data(create_dataloaders(database))
+        .extension(DepthLimit::new(config.max_depth))
+        .extension(ComplexityLimit::new(config.max_complexity))
+        .extension(MetricsExtension);
     
-    // Build app with GraphQL routes
-    let app = Router::new()
-        .merge(health_routes())
-        .merge(graphql_routes(schema))
-        .route("/metrics", get(metrics_handler))
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state);
+    if config.enable_logging {
+        builder = builder.extension(Logger);
+    }
     
-    // ... rest of server setup ...
+    if std::env::var("ENVIRONMENT").unwrap_or_default() == "production" {
+        builder = builder.disable_introspection();
+    }
+    
+    builder.finish()
+}
+
+// Update main.rs to add GraphQL routes
+pub fn create_graphql_router(schema: AppSchema) -> Router {
+    Router::new()
+        .route("/graphql", post(graphql_handler).get(graphql_playground))
+        .route("/graphql/ws", get(websocket_handler))
+        .route("/schema", get(schema_handler))
+        .layer(Extension(schema))
 }
 ```
 
-#### Task 3.6.4: Create Verification Script
-Add Phase 3 verification:
+#### Task 3.5.5: Create Verification Script
+Add comprehensive verification:
 ```bash
 #!/bin/bash
 # scripts/verify-phase-3.sh
 set -e
 
-echo "=== Phase 3 Verification ==="
+echo "=== Phase 3 GraphQL Implementation Verification ==="
 
-# 1. Check compilation
+# Check compilation
 echo "✓ Checking compilation..."
-just build
+just build || { echo "Build failed"; exit 1; }
 
-# 2. Run unit tests
+# Run tests
 echo "✓ Running GraphQL tests..."
-just test-graphql
+just test-graphql || { echo "Tests failed"; exit 1; }
 
-# 3. Start server
+# Start server in background
 echo "✓ Starting server..."
-cargo run --features demo &
+ENVIRONMENT=development cargo run --features demo &
 SERVER_PID=$!
 sleep 5
 
-# 4. Test GraphQL endpoint
-echo "✓ Testing GraphQL queries..."
+# Test GraphQL endpoint
+echo "✓ Testing GraphQL health query..."
 curl -X POST http://localhost:8080/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query":"{ health { status } }"}' | jq .
+  -d '{"query":"{ health { status } }"}' \
+  | jq .
 
-# 5. Test mutations
-echo "✓ Testing mutations..."
-RESULT=$(curl -X POST http://localhost:8080/graphql \
+# Test introspection (should work in demo mode)
+echo "✓ Testing introspection..."
+curl -X POST http://localhost:8080/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query":"mutation { createNote(input: { title: \"Test\", content: \"Test\", author: \"test\" }) { id } }"}')
-NOTE_ID=$(echo $RESULT | jq -r .data.createNote.id)
+  -d '{"query":"{ __schema { types { name } } }"}' \
+  | jq '.data.__schema.types | length'
 
-# 6. Test subscriptions
-echo "✓ Testing WebSocket subscriptions..."
-# Use wscat or similar to test WebSocket
+# Test WebSocket connection
+echo "✓ Testing WebSocket..."
+websocat -t ws://localhost:8080/graphql/ws <<< '{"type":"connection_init"}'
 
-# 7. Check metrics
-echo "✓ Checking GraphQL metrics..."
-curl -s http://localhost:8080/metrics | grep graphql_
+# Check metrics
+echo "✓ Verifying metrics..."
+curl -s http://localhost:8080/metrics | grep -E "graphql_"
 
-# 8. Test playground (demo mode)
-echo "✓ Testing GraphQL playground..."
-curl -s http://localhost:8080/graphql | grep -q "GraphQL Playground"
-
-# 9. Test schema export (demo mode)
-echo "✓ Testing schema export..."
-curl -s http://localhost:8080/schema | grep -q "type Query"
-
-# 10. Cleanup
+# Cleanup
 kill $SERVER_PID
 
-echo "=== All Phase 3 checks passed! ==="
+echo "=== All Phase 3 verification passed! ==="
 ```
 
 ---
-## 🛑 CHECKPOINT 4: Complete Phase 3 System Review
+## 🛑 CHECKPOINT 5: Complete Integration Review
 
 **STOP HERE FOR FINAL EXTERNAL REVIEW**
 
-**Before requesting review, ensure you have:**
-1. Integrated GraphQL with main server
-2. All routes properly configured
-3. Metrics collection working
-4. Complete integration test suite
-5. GraphQL playground accessible (demo mode)
-6. Schema export working (demo mode)
-7. All security controls enforced:
-   - Query depth limiting
-   - Complexity calculation
-   - Introspection disabled in production
-8. Performance optimizations:
-   - DataLoader preventing N+1 queries
-   - Subscription limits enforced
-9. Documentation updated
-10. Committed all work with message: "Checkpoint 4: Phase 3 complete"
+**Before requesting review:**
+1. Run full verification script successfully
+2. Test security limits work correctly
+3. Verify metrics are collected properly
+4. Check all queries, mutations, and subscriptions work
+5. Review all documentation
+6. Write any questions to `api/.claude/.reviews/checkpoint-5-questions.md`
+7. Commit with message: "Checkpoint 5: Phase 3 complete"
 
-**Request review by providing:**
-- Link to this checkpoint in WORK_PLAN.md
-- Link to REVIEW_PLAN.md section for Checkpoint 4
-- Your git commit hash
-- Output from `scripts/verify-phase-3.sh`
-- GraphQL playground demonstration
-- Metrics showing GraphQL operations
+**Final Review Checklist:**
+- [ ] All Done Criteria met
+- [ ] Security controls enforced
+- [ ] Metrics properly collected
+- [ ] WebSocket subscriptions working
+- [ ] Integration with Phase 1 & 2 complete
+- [ ] Documentation complete
+- [ ] No security vulnerabilities
+- [ ] Performance acceptable
 
-**Review Checklist for Reviewer**:
-
-### GraphQL Implementation
-- [ ] All queries working (note, notes, notesByAuthor, searchNotes, health)
-- [ ] All mutations working (createNote, updateNote, deleteNote)
-- [ ] All subscriptions working (noteCreated, noteUpdated, noteDeleted)
-- [ ] Pagination implemented correctly
-- [ ] Input validation with clear errors
-
-### Security Controls
-- [ ] Query depth limited (configurable, default 15)
-- [ ] Query complexity limited (configurable, default 1000)
-- [ ] Introspection disabled in production
-- [ ] Playground only in demo mode
-- [ ] Authorization checks in place
-
-### Performance
-- [ ] DataLoader prevents N+1 queries
-- [ ] Subscription limits enforced
-- [ ] Query timeouts implemented
-- [ ] Metrics track performance
-
-### Integration
-- [ ] GraphQL routes integrated with server
-- [ ] Context properly propagated
-- [ ] Errors mapped correctly
-- [ ] Health check includes GraphQL status
-
-### Testing & Documentation
-- [ ] Unit tests for all resolvers
-- [ ] Integration tests for complete flows
-- [ ] Security tests for limits
-- [ ] Performance tests for DataLoader
-- [ ] API documentation complete
-
-### Operational Readiness
-- [ ] Verification script passes
-- [ ] Metrics exposed properly
-- [ ] Logs include GraphQL operations
-- [ ] Configuration documented
-- [ ] All Phase 3 "Done Criteria" met
-
-**Final Approval Required**: The reviewer must explicitly approve before Phase 4 can begin.
+**DO NOT PROCEED** to Phase 4 until final approval received.
 
 ---
 
-## Final Phase 3 Deliverables
+## Test Coverage Requirements
 
-Before marking Phase 3 complete, ensure these artifacts exist:
+**MUST achieve:**
+- ≥80% overall test coverage
+- ≥95% coverage on critical paths:
+  - Security validation (depth/complexity)
+  - Authorization checks
+  - Error handling paths
+  - WebSocket lifecycle
 
-1. **Documentation**
-   - [ ] GraphQL API documentation
-   - [ ] Schema documentation (auto-generated)
-   - [ ] Security configuration guide
-   - [ ] Performance tuning guide
+**MAY exclude from coverage with documentation:**
+- Generated GraphQL code
+- Metrics collection (if tested manually)
+- WebSocket protocol internals
 
-2. **Tests**
-   - [ ] Unit tests for all resolvers
-   - [ ] Integration tests for complete flows
-   - [ ] WebSocket subscription tests
-   - [ ] Security limit tests
-   - [ ] Performance/DataLoader tests
+## Common Issues and Solutions
 
-3. **Scripts**
-   - [ ] `scripts/verify-phase-3.sh` - Automated verification
-   - [ ] `scripts/test-graphql.sh` - GraphQL-specific tests
-   - [ ] `scripts/load-test-graphql.sh` - Performance testing
+### GraphQL Issues
+- **"Cannot return null for non-nullable field"**: Check resolver returns proper Option types
+- **Subscription not receiving events**: Verify EventBroadcaster is shared in context
+- **WebSocket connection drops**: Check connection limits and timeouts
 
-4. **Metrics**
-   - [ ] Request counts by operation
-   - [ ] Request duration histograms
-   - [ ] Field resolution times
-   - [ ] Active subscription gauge
+### Security Issues
+- **Depth limit not working**: Ensure extension is added to schema builder
+- **Complexity calculation wrong**: Review list size multipliers
+- **Introspection still enabled**: Check ENVIRONMENT variable is set
 
-## Next Steps
+### Performance Issues
+- **N+1 queries**: Ensure DataLoader is used for all batch operations
+- **Slow subscriptions**: Check event filtering efficiency
+- **High memory usage**: Monitor subscription connection count
 
-Once all checkpoints pass:
-1. Commit with message: "Complete Phase 3: GraphQL Implementation"
-2. Tag as `v0.3.0-phase3`
-3. Create PR for review if working in team
-4. Document any deviations from original plan
-5. Begin Phase 4 planning (Authorization & Authentication)
+## Next Phase Preview
 
-## Important Notes
-
-- **DO NOT PROCEED** past a checkpoint until all verification steps pass
-- **MAINTAIN** security-first approach - all limits must be enforced
-- **DOCUMENT** GraphQL-specific configuration options
-- **TEST** edge cases thoroughly - malicious queries, deep nesting, etc.
-- **MONITOR** subscription connections to prevent resource exhaustion
-
-## Troubleshooting Guide
-
-### Common Issues and Solutions
-
-#### GraphQL Schema Issues
-
-**Issue**: Schema fails to build
-**Solution**: 
-- Check all types are properly defined
-- Verify no circular dependencies
-- Ensure all resolvers return correct types
-
-**Issue**: Subscriptions not working
-**Solution**:
-- Verify WebSocket route is configured
-- Check event broadcaster is initialized
-- Ensure mutations broadcast events
-- Test WebSocket connection directly
-
-#### Security Issues
-
-**Issue**: Deep queries not rejected
-**Solution**:
-- Verify depth limit is configured
-- Check visitor is added to schema
-- Test with deeper query
-
-**Issue**: Complexity not calculated
-**Solution**:
-- Ensure complexity attributes on fields
-- Verify calculator is initialized
-- Check max complexity is set
-
-#### Performance Issues
-
-**Issue**: N+1 queries detected
-**Solution**:
-- Implement DataLoader for relationship
-- Batch database queries
-- Check resolver implementations
-
-**Issue**: Slow subscription delivery
-**Solution**:
-- Check broadcaster capacity
-- Monitor active subscriptions
-- Review event filtering logic
-
-### Debugging Tips
-
-1. **Enable GraphQL debug mode**: `GRAPHQL_DEBUG=true`
-2. **Log all operations**: Add logging extension
-3. **Monitor WebSocket connections**: Use browser dev tools
-4. **Test with GraphQL playground**: Available in demo mode
-5. **Check metrics**: GraphQL-specific metrics at `/metrics`
-
-### Useful Resources
-
-- [async-graphql Documentation](https://async-graphql.github.io/async-graphql/)
-- [GraphQL Best Practices](https://graphql.org/learn/best-practices/)
-- [DataLoader Pattern](https://github.com/graphql/dataloader)
-- [GraphQL Security](https://www.howtographql.com/advanced/4-security/)
+Phase 4 will implement Authorization & Authentication:
+- SpiceDB integration for permissions
+- Session management
+- OAuth2/OIDC support
+- Permission caching
 
 ---
-*This work plan follows the same structure and practices as Phase 1 & 2, adapted for GraphQL implementation.*
+*This work plan follows the same structure and TDD practices as Phase 1 & 2, adapted specifically for GraphQL implementation requirements.*
