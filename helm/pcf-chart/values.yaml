@@ -1,0 +1,383 @@
+# Default values for pcf-chart
+
+# Global settings
+global:
+  namespace: pcf
+  storageClass: "standard"  # Configure based on your cluster
+  domain: "pcf.local"       # Base domain for services
+  
+  # Linkerd service mesh annotations
+  linkerd:
+    enabled: true
+    inject: enabled
+    
+  # IPv6 configuration for Cilium
+  ipv6:
+    enabled: true
+    
+# Namespace configuration
+namespace:
+  create: true
+  name: pcf
+  labels:
+    "linkerd.io/inject": "enabled"
+    "pod-security.kubernetes.io/enforce": "restricted"
+
+# External Secrets Configuration
+external-secrets:
+  enabled: true
+  installCRDs: true
+  webhook:
+    create: true
+  certController:
+    create: true
+    
+# Vault Backend Store for External Secrets
+vaultBackendStore:
+  server: "https://vault.example.com:8200"  # Configure your Vault server
+  path: "secret"
+  version: "v2"
+  namespace: "pcf"  # Vault namespace
+  auth:
+    kubernetes:
+      mountPath: "kubernetes"
+      role: "pcf-role"
+      serviceAccountRef:
+        name: "pcf-vault-auth"
+
+# Cert-Manager Configuration
+cert-manager:
+  enabled: true
+  installCRDs: true
+  global:
+    leaderElection:
+      namespace: cert-manager
+  # Configure for Linkerd certificate management
+  extraArgs:
+    - --feature-gates=ExperimentalCertificateSigningRequestControllers=true
+
+# Cilium CNI Configuration
+cilium:
+  enabled: true
+  # IPv6 only configuration
+  ipv4:
+    enabled: false
+  ipv6:
+    enabled: true
+  # Disable iptables
+  bpf:
+    masquerade: true
+  installNoConntrackIptablesRules: true
+  # Disable Cilium service mesh (using Linkerd instead)
+  serviceAccounts:
+    envoy:
+      create: false
+  envoy:
+    enabled: false
+
+# Linkerd Service Mesh
+linkerd2:
+  enabled: true
+  identity:
+    # Use cert-manager for issuing certificates
+    externalCA: true
+    issuer:
+      scheme: kubernetes.io/tls
+
+# Traefik Ingress Controller
+traefik:
+  enabled: true
+  deployment:
+    replicas: 2
+  service:
+    type: LoadBalancer
+    annotations:
+      "linkerd.io/inject": "enabled"
+  ingressRoute:
+    dashboard:
+      enabled: true
+      matchRule: Host(`traefik.{{ .Values.global.domain }}`)
+  providers:
+    kubernetesIngress:
+      enabled: true
+      allowExternalNameServices: true
+    kubernetesCRD:
+      enabled: true
+      allowExternalNameServices: true
+  logs:
+    general:
+      level: INFO
+    access:
+      enabled: true
+  metrics:
+    prometheus:
+      enabled: true
+
+# Grafana Configuration
+grafana:
+  enabled: true
+  replicas: 1
+  adminUser: admin
+  # Password will be set via external-secrets
+  adminPassword: ""
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.{{ .Values.global.domain }}
+  persistence:
+    enabled: true
+    storageClassName: "{{ .Values.global.storageClass }}"
+    size: 10Gi
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "0.5"
+    requests:
+      memory: 256Mi
+      cpu: "0.25"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# Loki Configuration
+loki:
+  enabled: true
+  loki:
+    auth_enabled: false
+    storage:
+      type: filesystem
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+  singleBinary:
+    replicas: 1
+    persistence:
+      enabled: true
+      storageClass: "{{ .Values.global.storageClass }}"
+      size: 10Gi
+    resources:
+      limits:
+        memory: 512Mi
+        cpu: "0.5"
+      requests:
+        memory: 256Mi
+        cpu: "0.25"
+  gateway:
+    enabled: false
+  monitoring:
+    dashboards:
+      enabled: true
+    rules:
+      enabled: true
+    serviceMonitor:
+      enabled: true
+
+# Tempo Configuration
+tempo:
+  enabled: true
+  tempo:
+    metricsGenerator:
+      enabled: true
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+  persistence:
+    enabled: true
+    storageClassName: "{{ .Values.global.storageClass }}"
+    size: 10Gi
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "0.5"
+    requests:
+      memory: 256Mi
+      cpu: "0.25"
+
+# OpenTelemetry Collector
+otelCollector:
+  enabled: true
+  name: otel-collector
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: latest
+  replicas: 2
+  resources:
+    limits:
+      memory: 512M
+      cpu: "1"
+    requests:
+      memory: 256M
+      cpu: "0.5"
+  ports:
+    otlp-grpc: 4317
+    otlp-http: 4318
+    prometheus: 8888
+    prometheus-exporter: 8889
+    health-check: 13133
+    zpages: 55679
+  service:
+    type: ClusterIP
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# ORY Kratos
+kratos:
+  enabled: true
+  name: kratos
+  image:
+    repository: oryd/kratos
+    tag: v1.0.0
+  replicas: 2
+  service:
+    public:
+      port: 4433
+    admin:
+      port: 4434
+  ingress:
+    enabled: true
+    className: traefik
+    public:
+      host: kratos.{{ .Values.global.domain }}
+    admin:
+      host: kratos-admin.{{ .Values.global.domain }}
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "1"
+    requests:
+      memory: 256Mi
+      cpu: "0.5"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# ORY Hydra
+hydra:
+  enabled: true
+  name: hydra
+  image:
+    repository: oryd/hydra
+    tag: v2.2.0
+  replicas: 2
+  service:
+    public:
+      port: 4444
+    admin:
+      port: 4445
+  ingress:
+    enabled: true
+    className: traefik
+    public:
+      host: hydra.{{ .Values.global.domain }}
+    admin:
+      host: hydra-admin.{{ .Values.global.domain }}
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "1"
+    requests:
+      memory: 256Mi
+      cpu: "0.5"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# SpiceDB
+spicedb:
+  enabled: true
+  name: spicedb
+  image:
+    repository: authzed/spicedb
+    tag: latest
+  replicas: 2
+  service:
+    grpc:
+      port: 50051
+    http:
+      port: 8443
+    metrics:
+      port: 9090
+  ingress:
+    enabled: true
+    className: traefik
+    host: spicedb.{{ .Values.global.domain }}
+  persistence:
+    enabled: false  # Using in-memory for now
+  resources:
+    limits:
+      memory: 512M
+      cpu: "1"
+    requests:
+      memory: 256M
+      cpu: "0.5"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# SurrealDB
+surrealdb:
+  enabled: true
+  name: surrealdb
+  image:
+    repository: surrealdb/surrealdb
+    tag: latest
+  replicas: 1
+  service:
+    port: 8000
+  ingress:
+    enabled: true
+    className: traefik
+    host: surrealdb.{{ .Values.global.domain }}
+  persistence:
+    enabled: true
+    storageClass: "{{ .Values.global.storageClass }}"
+    size: 20Gi
+  resources:
+    limits:
+      memory: 1G
+      cpu: "1"
+    requests:
+      memory: 512M
+      cpu: "0.5"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# API Service
+api:
+  enabled: true
+  name: api
+  image:
+    repository: aRustyDev/pcf-api
+    tag: latest
+  replicas: 2
+  service:
+    port: 4000
+  ingress:
+    enabled: true
+    className: traefik
+    host: api.{{ .Values.global.domain }}
+  resources:
+    limits:
+      memory: 512M
+      cpu: "1"
+    requests:
+      memory: 256M
+      cpu: "0.5"
+  env:
+    SPICEDB_ENDPOINT: "spicedb:50051"
+    SURREALDB_ENDPOINT: "http://surrealdb:8000"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+    OTEL_EXPORTER_OTLP_INSECURE: "true"
+    KRATOS_PUBLIC_URL: "http://kratos:4433"
+    KRATOS_ADMIN_URL: "http://kratos:4434"
+  podAnnotations:
+    "linkerd.io/inject": "enabled"
+
+# Service Account Configuration
+serviceAccount:
+  create: true
+  name: pcf-sa
+  annotations:
+    "linkerd.io/inject": "enabled"

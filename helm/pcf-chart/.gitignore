@@ -1,0 +1,25 @@
+# Helm dependency charts
+charts/
+
+# Helm lock file
+Chart.lock
+
+# Helm package files
+*.tgz
+
+# Values files with secrets
+*-secrets.yaml
+secrets.yaml
+values-prod.yaml
+values-dev.yaml
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+.DS_Store
+
+# IDE files
+.idea/
+.vscode/
+*.iml

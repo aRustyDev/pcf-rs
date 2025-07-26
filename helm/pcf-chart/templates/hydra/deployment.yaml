@@ -1,0 +1,105 @@
+{{- if .Values.hydra.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.hydra.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+spec:
+  replicas: {{ .Values.hydra.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcf-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hydra
+  template:
+    metadata:
+      labels:
+        {{- include "pcf-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hydra
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/external-secrets/external-secrets.yaml") . | sha256sum }}
+        {{- include "pcf-chart.linkerdAnnotations" . | nindent 8 }}
+        {{- with .Values.hydra.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcf-chart.serviceAccountName" . }}
+      initContainers:
+        - name: wait-for-secrets
+          image: busybox:1.35
+          command: ['sh', '-c', 'until [ -f /secrets/system ]; do echo waiting for secrets; sleep 2; done']
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+      containers:
+        - name: hydra
+          image: "{{ .Values.hydra.image.repository }}:{{ .Values.hydra.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - hydra
+          args:
+            - serve
+            - all
+            - --dev
+          env:
+            - name: DSN
+              value: memory
+            - name: URLS_SELF_ISSUER
+              value: http://{{ tpl .Values.hydra.ingress.public.host . }}
+            - name: URLS_CONSENT
+              value: http://{{ tpl .Values.api.ingress.host . }}/consent
+            - name: URLS_LOGIN
+              value: http://{{ tpl .Values.api.ingress.host . }}/login
+            - name: URLS_LOGOUT
+              value: http://{{ tpl .Values.api.ingress.host . }}/logout
+            - name: SECRETS_SYSTEM
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-secrets
+                  key: system
+            - name: OIDC_SUBJECT_IDENTIFIERS_SUPPORTED_TYPES
+              value: public,pairwise
+            - name: OIDC_SUBJECT_IDENTIFIERS_PAIRWISE_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: hydra-secrets
+                  key: system
+            - name: LOG_LEVEL
+              value: debug
+            - name: OAUTH2_EXPOSE_INTERNAL_ERRORS
+              value: "true"
+            - name: SERVE_COOKIES_SAME_SITE_MODE
+              value: Lax
+          ports:
+            - name: public
+              containerPort: {{ .Values.hydra.service.public.port }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.hydra.service.admin.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+          resources:
+            {{- toYaml .Values.hydra.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: secrets
+          secret:
+            secretName: hydra-secrets
+{{- end }}

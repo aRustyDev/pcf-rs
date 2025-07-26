@@ -1,0 +1,76 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.otelCollector.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  replicas: {{ .Values.otelCollector.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcf-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-collector
+  template:
+    metadata:
+      labels:
+        {{- include "pcf-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: otel-collector
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/otel-collector/configmap.yaml") . | sha256sum }}
+        {{- include "pcf-chart.linkerdAnnotations" . | nindent 8 }}
+        {{- with .Values.otelCollector.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcf-chart.serviceAccountName" . }}
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.otelCollector.image.repository }}:{{ .Values.otelCollector.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/otelcol-contrib"
+            - "--config=/etc/otel-collector/config.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ .Values.otelCollector.ports.otlp-grpc }}
+              protocol: TCP
+            - name: otlp-http
+              containerPort: {{ .Values.otelCollector.ports.otlp-http }}
+              protocol: TCP
+            - name: prometheus
+              containerPort: {{ .Values.otelCollector.ports.prometheus }}
+              protocol: TCP
+            - name: prom-exporter
+              containerPort: {{ .Values.otelCollector.ports.prometheus-exporter }}
+              protocol: TCP
+            - name: health-check
+              containerPort: {{ .Values.otelCollector.ports.health-check }}
+              protocol: TCP
+            - name: zpages
+              containerPort: {{ .Values.otelCollector.ports.zpages }}
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-collector
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health-check
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health-check
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Values.otelCollector.name }}-config
+{{- end }}

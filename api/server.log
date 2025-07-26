@@ -1,0 +1,17 @@
+warning: unused import: `state::*`
+ --> src/health/mod.rs:5:9
+  |
+5 | pub use state::*;
+  |         ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `shutdown::*`
+ --> src/server/mod.rs:5:9
+  |
+5 | pub use shutdown::*;
+  |         ^^^^^^^^^^^
+
+warning: `pcf-api` (lib) generated 2 warnings (run `cargo fix --lib -p pcf-api` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running `target/debug/pcf-api`

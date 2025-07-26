@@ -1,0 +1,60 @@
+{{- if and .Values.hydra.enabled .Values.hydra.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.hydra.name }}-public
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+    app.kubernetes.io/service: public
+  annotations:
+    {{- if .Values.hydra.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.hydra.ingress.className }}
+    {{- end }}
+spec:
+  {{- if .Values.hydra.ingress.className }}
+  ingressClassName: {{ .Values.hydra.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ tpl .Values.hydra.ingress.public.host . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.hydra.name }}-public
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.hydra.name }}-admin
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+    app.kubernetes.io/service: admin
+  annotations:
+    {{- if .Values.hydra.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.hydra.ingress.className }}
+    {{- end }}
+spec:
+  {{- if .Values.hydra.ingress.className }}
+  ingressClassName: {{ .Values.hydra.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ tpl .Values.hydra.ingress.admin.host . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.hydra.name }}-admin
+                port:
+                  number: 80
+{{- end }}

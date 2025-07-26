@@ -1,0 +1,24 @@
+# Production-specific configuration overrides
+# IMPORTANT: Most production values should come from environment variables
+# This file only contains non-sensitive production defaults
+
+[server]
+host = "0.0.0.0"
+port = 4000
+workers = 4
+
+[database.surrealdb]
+connection_timeout = 10  # Shorter timeout in production
+
+[services.spicedb]
+insecure = false  # Require TLS in production
+
+[graphql]
+playground_enabled = false
+introspection_enabled = false
+max_depth = 10
+max_complexity = 500
+max_aliases = 10
+
+[features]
+enable_telemetry = true

@@ -1,0 +1,14 @@
+definition person {}
+definition account {}
+definition profile {}
+definition comment {}
+definition note {}
+definition survey {}
+definition skill {}
+definition eligibilityDecision {}
+definition prepRecord {}
+definition skill {}
+definition skill {}
+definition skill {}
+definition skill {}
+definition project {}

@@ -1,0 +1,75 @@
+# grafana-datasources.yaml
+apiVersion: 1
+
+datasources:
+    # Prometheus datasource for metrics
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus:9090
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: true
+      jsonData:
+          httpMethod: POST
+          # Enable exemplar support to link metrics to traces
+          exemplarTraceIdDestinations:
+              - datasourceUid: tempo
+                name: trace_id
+
+    # Tempo datasource for traces
+    - name: Tempo
+      type: tempo
+      access: proxy
+      orgId: 1
+      url: http://tempo:3200
+      basicAuth: false
+      isDefault: false
+      version: 1
+      editable: true
+      uid: tempo
+      jsonData:
+          nodeGraph:
+              enabled: true
+          search:
+              hide: false
+          lokiSearch:
+              datasourceUid: loki
+          traceQuery:
+              timeShiftEnabled: true
+              spanStartTimeShift: "1h"
+              spanEndTimeShift: "-1h"
+
+    # Loki datasource for logs
+    - name: Loki
+      type: loki
+      access: proxy
+      orgId: 1
+      url: http://loki:3100
+      basicAuth: false
+      isDefault: false
+      version: 1
+      editable: true
+      uid: loki
+      jsonData:
+          maxLines: 1000
+          derivedFields:
+              - datasourceUid: tempo
+                matcherRegex: "trace_id=(\\w+)"
+                name: TraceID
+                url: "$${__value.raw}"
+
+    # Mimir datasource for long-term metrics
+    - name: Mimir
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://mimir:9009/prometheus
+      basicAuth: false
+      isDefault: false
+      version: 1
+      editable: true
+      jsonData:
+          httpMethod: POST

@@ -1,0 +1,186 @@
+{{- if .Values.kratos.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.kratos.name }}-config
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kratos
+data:
+  kratos.yml: |
+    version: v0.13.0
+    
+    dsn: memory
+    
+    serve:
+      public:
+        base_url: http://{{ .Values.kratos.ingress.public.host }}/
+        cors:
+          enabled: true
+          allowed_origins:
+            - http://{{ .Values.kratos.ingress.public.host }}
+            - http://{{ .Values.api.ingress.host }}
+          allowed_methods:
+            - POST
+            - GET
+            - PUT
+            - PATCH
+            - DELETE
+          allowed_headers:
+            - Authorization
+            - Cookie
+            - Content-Type
+          exposed_headers:
+            - Content-Type
+            - Set-Cookie
+          allow_credentials: true
+      admin:
+        base_url: http://{{ .Values.kratos.name }}:{{ .Values.kratos.service.admin.port }}/
+    
+    selfservice:
+      default_browser_return_url: http://{{ .Values.api.ingress.host }}/
+      allowed_return_urls:
+        - http://{{ .Values.api.ingress.host }}
+      
+      methods:
+        password:
+          enabled: true
+        totp:
+          config:
+            issuer: PCF
+          enabled: true
+        lookup_secret:
+          enabled: true
+        link:
+          enabled: true
+        code:
+          enabled: true
+      
+      flows:
+        error:
+          ui_url: http://{{ .Values.api.ingress.host }}/error
+        
+        settings:
+          ui_url: http://{{ .Values.api.ingress.host }}/settings
+          lifespan: 10m
+          required_aal: highest_available
+          privileged_session_max_age: 15m
+        
+        recovery:
+          enabled: true
+          ui_url: http://{{ .Values.api.ingress.host }}/recovery
+          lifespan: 10m
+          use: code
+        
+        verification:
+          enabled: true
+          ui_url: http://{{ .Values.api.ingress.host }}/verification
+          lifespan: 10m
+          use: code
+        
+        logout:
+          after:
+            default_browser_return_url: http://{{ .Values.api.ingress.host }}/login
+        
+        login:
+          ui_url: http://{{ .Values.api.ingress.host }}/login
+          lifespan: 10m
+        
+        registration:
+          lifespan: 10m
+          ui_url: http://{{ .Values.api.ingress.host }}/registration
+          after:
+            password:
+              hooks:
+                - hook: session
+    
+    log:
+      level: debug
+      format: json
+      leak_sensitive_values: true
+    
+    secrets:
+      cookie:
+        - "${SECRETS_COOKIE}"
+      cipher:
+        - "${SECRETS_CIPHER}"
+    
+    session:
+      lifespan: 24h
+      cookie:
+        persistent: true
+        name: ory_kratos_session
+        same_site: Lax
+        path: /
+        domain: {{ .Values.global.domain }}
+    
+    hashers:
+      algorithm: argon2
+    
+    identity:
+      default_schema_id: default
+      schemas:
+        - id: default
+          url: file:///etc/config/identity.schema.json
+    
+    courier:
+      smtp:
+        connection_uri: smtps://test:test@mailslurper:1025/?skip_ssl_verify=true
+  
+  identity.schema.json: |
+    {
+      "$id": "https://schemas.ory.sh/presets/kratos/identity.email.schema.json",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Person",
+      "type": "object",
+      "properties": {
+        "traits": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email",
+              "title": "E-Mail",
+              "ory.sh/kratos": {
+                "credentials": {
+                  "password": {
+                    "identifier": true
+                  },
+                  "webauthn": {
+                    "identifier": true
+                  },
+                  "totp": {
+                    "account_name": true
+                  }
+                },
+                "recovery": {
+                  "via": "email"
+                },
+                "verification": {
+                  "via": "email"
+                }
+              }
+            },
+            "name": {
+              "type": "object",
+              "properties": {
+                "first": {
+                  "title": "First Name",
+                  "type": "string"
+                },
+                "last": {
+                  "title": "Last Name",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "email"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+{{- end }}

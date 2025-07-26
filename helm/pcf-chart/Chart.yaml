@@ -1,0 +1,64 @@
+apiVersion: v2
+name: pcf-chart
+description: A Helm chart for PCF (Personal Cloud Framework) with full observability stack
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - pcf
+  - observability
+  - identity
+  - authorization
+home: https://github.com/yourusername/pcf-rs
+sources:
+  - https://github.com/yourusername/pcf-rs
+maintainers:
+  - name: Your Name
+    email: your.email@example.com
+
+dependencies:
+  # Ingress Controller
+  - name: traefik
+    version: "26.0.0"
+    repository: https://traefik.github.io/charts
+    condition: traefik.enabled
+    
+  # Observability Stack
+  - name: grafana
+    version: "7.0.0"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+    
+  - name: loki
+    version: "5.41.4"
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled
+    
+  - name: tempo
+    version: "1.7.1"
+    repository: https://grafana.github.io/helm-charts
+    condition: tempo.enabled
+    
+  # Service Mesh
+  - name: linkerd2
+    version: "2024.1.1"
+    repository: https://helm.linkerd.io/stable
+    condition: linkerd.enabled
+    
+  # Certificate Management
+  - name: cert-manager
+    version: "1.13.3"
+    repository: https://charts.jetstack.io
+    condition: cert-manager.enabled
+    
+  # Secrets Management
+  - name: external-secrets
+    version: "0.9.11"
+    repository: https://charts.external-secrets.io
+    condition: external-secrets.enabled
+    
+  # CNI
+  - name: cilium
+    version: "1.14.5"
+    repository: https://helm.cilium.io/
+    condition: cilium.enabled

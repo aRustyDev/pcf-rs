@@ -1,0 +1,44 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.otelCollector.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+  annotations:
+    {{- if .Values.global.linkerd.enabled }}
+    linkerd.io/inject: disabled  # Disable for load balancer service
+    {{- end }}
+spec:
+  type: {{ .Values.otelCollector.service.type }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.otelCollector.ports.otlp-grpc }}
+      targetPort: otlp-grpc
+      protocol: TCP
+    - name: otlp-http
+      port: {{ .Values.otelCollector.ports.otlp-http }}
+      targetPort: otlp-http
+      protocol: TCP
+    - name: prometheus
+      port: {{ .Values.otelCollector.ports.prometheus }}
+      targetPort: prometheus
+      protocol: TCP
+    - name: prom-exporter
+      port: {{ .Values.otelCollector.ports.prometheus-exporter }}
+      targetPort: prom-exporter
+      protocol: TCP
+    - name: health-check
+      port: {{ .Values.otelCollector.ports.health-check }}
+      targetPort: health-check
+      protocol: TCP
+    - name: zpages
+      port: {{ .Values.otelCollector.ports.zpages }}
+      targetPort: zpages
+      protocol: TCP
+  selector:
+    {{- include "pcf-chart.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+{{- end }}

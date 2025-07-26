@@ -1,0 +1,105 @@
+{{- if .Values.kratos.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kratos.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kratos
+spec:
+  replicas: {{ .Values.kratos.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcf-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kratos
+  template:
+    metadata:
+      labels:
+        {{- include "pcf-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kratos
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/kratos/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/external-secrets/external-secrets.yaml") . | sha256sum }}
+        {{- include "pcf-chart.linkerdAnnotations" . | nindent 8 }}
+        {{- with .Values.kratos.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcf-chart.serviceAccountName" . }}
+      initContainers:
+        - name: wait-for-secrets
+          image: busybox:1.35
+          command: ['sh', '-c', 'until [ -f /secrets/default ]; do echo waiting for secrets; sleep 2; done']
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+      containers:
+        - name: kratos
+          image: "{{ .Values.kratos.image.repository }}:{{ .Values.kratos.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - kratos
+          args:
+            - serve
+            - all
+            - --config
+            - /etc/config/kratos.yml
+            - --dev
+            - --watch-courier
+          env:
+            - name: DSN
+              value: memory
+            - name: LOG_LEVEL
+              value: debug
+            - name: SECRETS_DEFAULT
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-secrets
+                  key: default
+            - name: SECRETS_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-secrets
+                  key: cookie
+            - name: SECRETS_CIPHER
+              valueFrom:
+                secretKeyRef:
+                  name: kratos-secrets
+                  key: cipher
+          ports:
+            - name: public
+              containerPort: {{ .Values.kratos.service.public.port }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.kratos.service.admin.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/config
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+          resources:
+            {{- toYaml .Values.kratos.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Values.kratos.name }}-config
+        - name: secrets
+          secret:
+            secretName: kratos-secrets
+{{- end }}

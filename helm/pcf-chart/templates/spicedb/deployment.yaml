@@ -1,0 +1,104 @@
+{{- if .Values.spicedb.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.spicedb.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: spicedb
+spec:
+  replicas: {{ .Values.spicedb.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcf-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: spicedb
+  template:
+    metadata:
+      labels:
+        {{- include "pcf-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: spicedb
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/external-secrets/external-secrets.yaml") . | sha256sum }}
+        {{- include "pcf-chart.linkerdAnnotations" . | nindent 8 }}
+        {{- with .Values.spicedb.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcf-chart.serviceAccountName" . }}
+      initContainers:
+        - name: wait-for-secrets
+          image: busybox:1.35
+          command: ['sh', '-c', 'until [ -f /secrets/key ]; do echo waiting for secrets; sleep 2; done']
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+      containers:
+        - name: spicedb
+          image: "{{ .Values.spicedb.image.repository }}:{{ .Values.spicedb.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - spicedb
+            - serve
+          args:
+            - --grpc-preshared-key-file=/secrets/key
+            - --grpc-no-tls
+            - --http-no-tls
+            - --datastore-engine=memory
+            - --telemetry-endpoint=
+          env:
+            - name: SPICEDB_DATASTORE_ENGINE
+              value: memory
+            - name: SPICEDB_OTEL_PROVIDER
+              value: otlp
+            - name: SPICEDB_OTEL_ENDPOINT
+              value: {{ .Values.otelCollector.name }}:{{ .Values.otelCollector.ports.otlp-grpc }}
+            - name: SPICEDB_OTEL_INSECURE
+              value: "true"
+            - name: SPICEDB_LOG_LEVEL
+              value: info
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.spicedb.service.grpc.port }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.spicedb.service.http.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.spicedb.service.metrics.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            {{- if .Values.spicedb.persistence.enabled }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+          resources:
+            {{- toYaml .Values.spicedb.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - grpc_health_probe
+                - -addr=:{{ .Values.spicedb.service.grpc.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - grpc_health_probe
+                - -addr=:{{ .Values.spicedb.service.grpc.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: secrets
+          secret:
+            secretName: spicedb-preshared-key
+        {{- if .Values.spicedb.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.spicedb.name }}-data
+        {{- end }}
+{{- end }}

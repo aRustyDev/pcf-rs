@@ -355,10 +355,11 @@ services:
 
     # API (Placeholder) - Priority 4
     api:
-        image: busybox:latest
+        image: arustydev/pcf-api:latest
         container_name: api
-        command:
-            ["sh", "-c", "echo 'API placeholder running' && sleep infinity"]
+        # Remove override - let the API run naturally
+        ports:
+            - "4000:4000"
         environment:
             # Application environment
             APP_ENVIRONMENT: development

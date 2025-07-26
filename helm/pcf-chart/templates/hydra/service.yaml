@@ -1,0 +1,65 @@
+{{- if .Values.hydra.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.hydra.name }}
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+spec:
+  type: ClusterIP
+  ports:
+    - name: public
+      port: {{ .Values.hydra.service.public.port }}
+      targetPort: public
+      protocol: TCP
+    - name: admin
+      port: {{ .Values.hydra.service.admin.port }}
+      targetPort: admin
+      protocol: TCP
+  selector:
+    {{- include "pcf-chart.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.hydra.name }}-public
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+    app.kubernetes.io/service: public
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: public
+      protocol: TCP
+  selector:
+    {{- include "pcf-chart.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.hydra.name }}-admin
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+    app.kubernetes.io/service: admin
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: admin
+      protocol: TCP
+  selector:
+    {{- include "pcf-chart.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hydra
+{{- end }}

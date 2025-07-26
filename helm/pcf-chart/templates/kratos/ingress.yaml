@@ -1,0 +1,60 @@
+{{- if and .Values.kratos.enabled .Values.kratos.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.kratos.name }}-public
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kratos
+    app.kubernetes.io/service: public
+  annotations:
+    {{- if .Values.kratos.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.kratos.ingress.className }}
+    {{- end }}
+spec:
+  {{- if .Values.kratos.ingress.className }}
+  ingressClassName: {{ .Values.kratos.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ tpl .Values.kratos.ingress.public.host . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.kratos.name }}-public
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.kratos.name }}-admin
+  namespace: {{ include "pcf-chart.namespace" . }}
+  labels:
+    {{- include "pcf-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kratos
+    app.kubernetes.io/service: admin
+  annotations:
+    {{- if .Values.kratos.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.kratos.ingress.className }}
+    {{- end }}
+spec:
+  {{- if .Values.kratos.ingress.className }}
+  ingressClassName: {{ .Values.kratos.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ tpl .Values.kratos.ingress.admin.host . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.kratos.name }}-admin
+                port:
+                  number: 80
+{{- end }}
