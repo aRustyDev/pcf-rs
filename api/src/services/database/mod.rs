@@ -5,6 +5,9 @@ use semver::{Version, VersionReq};
 use std::collections::HashMap;
 use thiserror::Error;
 
+pub mod connection;
+pub mod metrics;
+
 /// Database health status
 #[derive(Debug, Clone, PartialEq)]
 pub enum DatabaseHealth {
