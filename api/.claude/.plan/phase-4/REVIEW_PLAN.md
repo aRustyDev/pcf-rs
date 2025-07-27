@@ -1,382 +1,507 @@
-# Phase 4 Review Plan - Guidelines for Reviewing Agents
+# Phase 4 Review Plan - Authorization & Authentication
 
 ## Overview
 
-This document provides comprehensive guidance for agents conducting reviews at Phase 4 checkpoints. As a reviewing agent, you are responsible for ensuring the authorization implementation meets all specifications, provides proper resilience, and integrates seamlessly with previous phases.
+This document provides comprehensive guidance for agents conducting reviews at Phase 4 checkpoints. Phase 4 implements secure authorization with SpiceDB integration, caching, and resilience patterns. The system must never fail due to authorization service unavailability while maintaining security.
 
-## Your Responsibilities as Reviewer
+## Review Context
 
-1. **Thoroughly examine all provided artifacts**
-2. **Test authorization flows end-to-end**
-3. **Verify resilience patterns (circuit breaker, fallback)**
-4. **Check cache implementation and performance**
-5. **Validate audit logging completeness**
-6. **Test degraded mode operation**
-7. **Ensure security best practices**
-8. **Verify TDD practices were followed**
-9. **Provide explicit feedback on findings**
-10. **Give clear approval or rejection**
+Phase 4 adds the authorization layer to the PCF-RS API, requiring careful review of:
+- Authorization helper pattern consistency
+- Caching implementation (positive-only, 5-minute TTL)
+- Circuit breaker resilience patterns
+- SpiceDB integration and fallback rules
+- Security implications of all decisions
+- Performance impact on GraphQL operations
 
 ## Core Review Principles
 
-### Authorization Security Verification
-At every checkpoint, verify security requirements are met:
-1. **Fail-secure approach** - Default deny, explicit allow
-2. **Proper error codes** - 401 vs 403 distinction
-3. **No information leakage** - Generic error messages
-4. **Audit completeness** - Every decision logged
-5. **Positive-only caching** - Never cache denials
-
-### Resilience Verification
-Ensure the system remains available during failures:
-1. **Circuit breaker works** - Opens/closes appropriately
-2. **Fallback rules apply** - Conservative permissions
-3. **Cache extends during outage** - 30-minute TTL
-4. **Health checks bypass auth** - Always accessible
-5. **Graceful degradation** - Read-only during outage
-
-### Performance Verification
-Check authorization doesn't become a bottleneck:
-1. **Cache hit rate > 80%** - After warm-up period
-2. **Sub-10ms cached checks** - Fast path optimization
-3. **Batch authorization** - For list operations
-4. **LRU eviction works** - Cache doesn't grow unbounded
-5. **Metrics available** - For monitoring
-
 ### Test-Driven Development (TDD) Verification
-Continue verifying TDD practices:
-1. **Tests exist before implementation** - Check git history
-2. **Tests fail first, then pass** - Red-Green-Refactor
-3. **Tests cover failure scenarios** - Outages, denials
-4. **Integration tests comprehensive** - End-to-end flows
+At every checkpoint, MUST verify TDD practices by checking:
+1. **Authorization tests exist before implementation**
+2. **Cache tests precede cache code**
+3. **Circuit breaker tests written before state machine**
+4. **Fallback tests before fallback rules**
+5. **All edge cases covered** - no auth, wrong auth, SpiceDB down, cache full
 
-## Review Process
+### Documentation Standards
+Authorization code MUST have comprehensive documentation including:
+1. **Security implications documented** - Why decisions are conservative
+2. **Cache strategy explained** - Why positive-only, TTL choices
+3. **Fallback rules justified** - Why specific operations allowed/denied
+4. **Circuit breaker thresholds** - Why specific values chosen
+5. **Audit requirements clear** - What must be logged and why
 
-For each checkpoint review:
+### Code Quality Requirements
+1. **NO .unwrap() or .expect() in production code paths** - test code and compile-time constants MAY use these with justification
+2. **All async operations properly handled** - No forgotten awaits
+3. **Resource cleanup guaranteed** - Cache cleanup tasks, connections
+4. **No sensitive data in logs** - User IDs okay, tokens/passwords never
+5. **Thread safety verified** - All shared state properly protected
 
-1. **Receive from implementing agent**:
-   - Link to Phase 4 REVIEW_PLAN.md
-   - Link to Phase 4 WORK_PLAN.md
-   - Specific checkpoint number
-   - All artifacts listed for that checkpoint
-   - Evidence of TDD approach
+## Review Process Flow
 
-2. **Perform the review** using checkpoint-specific checklist
+1. **Receive checkpoint artifacts**:
+   - Checkpoint number and description
+   - All code files created/modified
+   - Test output showing TDD approach
+   - Any questions in `api/.claude/.reviews/checkpoint-X-questions.md`
 
-3. **Test critical authorization features**:
-   - Permission checks work correctly
-   - Circuit breaker activates on failures
-   - Cache improves performance
-   - Fallback rules are conservative
-   - Audit logs capture all decisions
+2. **Execute comprehensive review checklist**
 
-4. **Document your findings** in structured format
+3. **Test the authorization implementation** using provided test commands
 
-5. **Provide clear decision**: APPROVED or CHANGES REQUIRED
+4. **Check for cleanliness and artifacts**
+
+5. **Document findings** in `api/.claude/.reviews/checkpoint-X-feedback.md`
+
+6. **Write progress notes** in `api/.claude/.reviews/checkpoint-X-review-vY.md`
+
+7. **Answer any questions** found in `api/.claude/.reviews/checkpoint-X-questions.md`
+
+8. **Provide clear decision**:
+   - APPROVED: All requirements met, no issues found
+   - APPROVED WITH CONDITIONS: Minor issues that can be fixed in parallel
+   - CHANGES REQUIRED: Critical issues blocking progress
+
+## Review Scope Requirements
+
+**MANDATORY**: Reviews are scoped to ONLY:
+- The current checkpoint being reviewed
+- Previously completed checkpoints in this phase
+- Integration with Phase 1, 2, and 3 components
+
+**DO NOT** review or suggest changes for future checkpoints.
+
+## Comprehensive Cleanliness Verification
+
+### Code Cleanliness Checklist
+**MUST verify ALL items - any failure requires "CHANGES REQUIRED"**
+
+#### Development Artifacts
+- [ ] No temporary files (*.tmp, *.bak, *.orig, test_*, demo_*)
+- [ ] No IDE-specific files (.idea/, .vscode/ unless explicitly needed)
+- [ ] No build artifacts in wrong directories
+- [ ] No test databases or SpiceDB data files committed
+- [ ] No example or scratch files
+
+#### Code Hygiene
+- [ ] No commented-out code (except with // KEEP: justification)
+- [ ] No debug statements (println!, dbg!, console.log, tracing::debug in production paths)
+- [ ] No test-only code in production paths
+- [ ] No hardcoded values (endpoints, keys, user IDs)
+- [ ] No TODO/FIXME without issue numbers
+- [ ] No unreachable or dead code
+- [ ] No unused imports or variables
+- [ ] No temporary workarounds without documentation
+
+#### Security Hygiene
+- [ ] No credentials or keys in code
+- [ ] No bypass mechanisms in production code
+- [ ] No test users or permissions
+- [ ] No debug endpoints exposed
+- [ ] No sensitive data in error messages
+- [ ] No authorization shortcuts
+
+#### Documentation Quality
+- [ ] All public APIs have rustdoc/comments
+- [ ] Security decisions documented
+- [ ] Complex algorithms explained
+- [ ] No outdated or misleading comments
+- [ ] Configuration options documented
+- [ ] Examples work as written
 
 ## Checkpoint-Specific Review Guidelines
 
 ### 🛑 CHECKPOINT 1: Authorization Framework Review
 
-**What You're Reviewing**: Core authorization helper and context
+**What You're Reviewing**: Core authorization helper, context extraction, session management, and audit logging
 
 **Key Specifications to Verify**:
-- Standard is_authorized function exists
-- Auth context properly extracted
-- Demo mode bypass works
-- Fallback rules implemented
-- Session extraction from JWT
+- Standard `is_authorized` helper follows specification pattern
+- Authentication context properly extracted from headers
+- Demo mode bypass only works with feature flag
+- Audit logging captures all required fields
+- Error responses distinguish 401 vs 403 correctly
 
-**Required Tests**:
+**Required Tests** (MUST execute all and verify output):
 ```bash
 # Test authorization helper
-cargo test helpers::authorization
+cargo test helpers::authorization::tests
 
-# Test without authentication
-curl -X POST http://localhost:8080/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ note(id: \"123\") { title } }"}'
-# Should return UNAUTHORIZED
+# Test authentication context
+cargo test auth::tests::test_auth_context
 
-# Test with authentication but no permission
-curl -X POST http://localhost:8080/graphql \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer test_token" \
-  -d '{"query":"{ note(id: \"restricted\") { title } }"}'
-# Should return FORBIDDEN
+# Test demo mode bypass
+cargo test --features demo test_demo_mode_bypass
 
-# Test demo mode
-DEMO_MODE=true cargo run --features demo
-# Should bypass all auth checks
+# Verify audit logging
+cargo test auth::audit::tests
+
+# Check error responses
+cargo test test_error_codes
 ```
 
-**Fallback Rules Test**:
-```bash
-# Simulate SpiceDB unavailable
-# Only these should work:
-# - Health checks (always)
-# - User reading own profile
-# - All writes should be denied
-```
+**Critical Security Reviews**:
+- Verify NO authorization bypasses except demo mode
+- Check authentication is required for all operations
+- Ensure audit logs cannot be disabled
+- Validate error messages don't leak information
+- Confirm session extraction is secure
 
-**Your Review Output Should Include**:
+**Performance Validation**:
+- Context extraction should be < 1ms
+- Helper function overhead minimal
+- No blocking operations in auth path
+
+**Review Checklist**:
 ```markdown
-## Checkpoint 1 Review Results
+## Checkpoint 1 Review - Authorization Framework
 
 ### Authorization Helper
-- [ ] is_authorized function exists: [YES/NO]
-- [ ] Follows specification pattern: [YES/NO]
-- [ ] Returns proper error types: [YES/NO]
-- [ ] Integrates with GraphQL context: [YES/NO]
+- [ ] is_authorized follows exact specification pattern
+- [ ] Demo mode bypass properly feature-gated
+- [ ] Authentication always required (except demo)
+- [ ] Cache check happens before SpiceDB
+- [ ] Positive results cached only
+- [ ] Audit logging always occurs
 
-### Auth Context
-- [ ] Extracts from headers correctly: [YES/NO]
-- [ ] Handles missing auth: [YES/NO]
-- [ ] Parses JWT claims: [YES/NO]
-- [ ] Demo mode tokens work: [YES/NO]
+### Authentication Context
+- [ ] Extracted from correct headers
+- [ ] User ID required for authentication
+- [ ] Trace ID generated if missing
+- [ ] Session token handled securely
+- [ ] No sensitive data logged
 
 ### Error Handling
-- [ ] Returns 401 for no auth: [YES/NO - test output]
-- [ ] Returns 403 for no permission: [YES/NO - test output]
-- [ ] Error messages are generic: [YES/NO]
-- [ ] No internal details leaked: [YES/NO]
+- [ ] 401 for missing authentication
+- [ ] 403 for denied authorization
+- [ ] Error codes follow GraphQL conventions
+- [ ] Messages don't reveal system details
+- [ ] All paths return proper errors
 
-### Fallback Rules
-- [ ] Health checks always allowed: [YES/NO]
-- [ ] Own profile readable: [YES/NO]
-- [ ] All writes denied: [YES/NO]
-- [ ] Conservative by default: [YES/NO]
+### Audit Logging
+- [ ] Every authorization decision logged
+- [ ] Required fields present (user, resource, action, result)
+- [ ] Source tracked (cache/spicedb/fallback)
+- [ ] Structured JSON format
+- [ ] No sensitive data in logs
 
-### Demo Mode
-- [ ] Bypass flag works: [YES/NO]
-- [ ] Only in debug builds: [YES/NO]
-- [ ] Clearly documented: [YES/NO]
+### Code Quality
+- [ ] No .unwrap() in production paths
+- [ ] All Results handled explicitly
+- [ ] Async functions properly awaited
+- [ ] Public APIs documented
+- [ ] Tests follow TDD pattern
 
-### TDD Verification
-- [ ] Tests written first: [YES/NO - evidence]
-- [ ] Auth scenarios covered: [YES/NO]
-- [ ] Fallback rules tested: [YES/NO]
-- [ ] Error cases tested: [YES/NO]
+### Cleanliness Check
+- [ ] No debug prints or logs
+- [ ] No commented-out code
+- [ ] No test users or data
+- [ ] No temporary files
+- [ ] All TODOs have issue numbers
 
-### Issues Found
-[List with severity and fixes]
-
-### Decision: [APPROVED / CHANGES REQUIRED]
+### Decision: [APPROVED / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
 ```
 
-### 🛑 CHECKPOINT 2: Cache and SpiceDB Integration Review
+### 🛑 CHECKPOINT 2: Authorization Cache Review
 
-**What You're Reviewing**: Authorization cache and SpiceDB client
+**What You're Reviewing**: Cache trait, implementation, TTL management, and cleanup tasks
 
 **Key Specifications to Verify**:
-- Cache only stores positive results
-- LRU eviction when full
-- SpiceDB client with circuit breaker
-- TTL extends during outages
-- Proper connection pooling
+- Cache stores positive results only (never negative)
+- TTL is exactly 5 minutes (300 seconds) normally
+- Extended to 30 minutes during SpiceDB outage
+- LRU eviction when at capacity
+- Background cleanup task running
+- Thread-safe concurrent access
 
-**Required Tests**:
+**Required Tests** (MUST execute all and verify output):
 ```bash
-# Test cache behavior
-cargo test auth::cache
+# Test cache operations
+cargo test auth::cache::tests
 
-# Test cache performance
-# First request (cold cache)
-time curl -X POST http://localhost:8080/graphql \
-  -H "Authorization: Bearer test_token" \
-  -d '{"query":"{ note(id: \"123\") { title } }"}'
+# Test TTL expiration
+cargo test cache_tests::test_cache_ttl_expiration
 
-# Second request (warm cache)
-time curl -X POST http://localhost:8080/graphql \
-  -H "Authorization: Bearer test_token" \
-  -d '{"query":"{ note(id: \"123\") { title } }"}'
-# Should be significantly faster
+# Test LRU eviction
+cargo test cache_tests::test_cache_max_size_eviction
 
-# Test circuit breaker
-# Make SpiceDB unavailable
-docker stop spicedb
-# Make several requests - circuit should open
-# Further requests should use fallback immediately
+# Test cleanup task
+cargo test cache_tests::test_cache_cleanup_task
+
+# Verify thread safety
+cargo test cache_concurrent_access -- --test-threads=10
 ```
 
-**Cache Verification**:
+**Memory and Performance Validation**:
 ```bash
-# Check metrics
-curl http://localhost:8080/metrics | grep auth_cache
-# Should show:
-# - auth_cache_size
-# - auth_cache_hits_total
-# - auth_cache_misses_total
-# - auth_cache_evictions_total
+# Check memory usage
+cargo run --example cache_memory_test
 
-# Verify positive-only caching
-# Make request that gets denied
-# Check cache size doesn't increase
+# Verify no memory leaks
+valgrind --leak-check=full cargo test cache_tests
+
+# Benchmark cache performance
+cargo bench cache_operations
 ```
 
-**Your Review Output Should Include**:
+**Review Checklist**:
 ```markdown
-## Checkpoint 2 Review Results
+## Checkpoint 2 Review - Authorization Cache
 
 ### Cache Implementation
-- [ ] Only caches positive results: [YES/NO - verified how]
-- [ ] LRU eviction works: [YES/NO - test output]
-- [ ] TTL management correct: [YES/NO]
-- [ ] Thread-safe operations: [YES/NO]
-- [ ] Metrics exposed: [YES/NO - list metrics]
+- [ ] Trait defines all required operations
+- [ ] In-memory implementation correct
+- [ ] Only positive results cached
+- [ ] TTL exactly 5 minutes default
+- [ ] Extended TTL 30 minutes for degraded mode
 
-### Cache Performance
-- [ ] Hit rate after warm-up: ___% (target > 80%)
-- [ ] Cached check latency: ___ms (target < 10ms)
-- [ ] Memory usage reasonable: [YES/NO - size: ___]
-- [ ] Eviction rate acceptable: [YES/NO - rate: ___/min]
+### Cache Behavior
+- [ ] Get returns None for expired entries
+- [ ] Set overwrites existing entries
+- [ ] LRU eviction when full
+- [ ] User invalidation clears all user entries
+- [ ] Statistics accurately tracked
 
-### SpiceDB Client
-- [ ] Connection pooling works: [YES/NO]
-- [ ] Timeout configured (2s): [YES/NO]
-- [ ] Bulk checks implemented: [YES/NO]
-- [ ] Error handling proper: [YES/NO]
+### Cleanup Task
+- [ ] Background task spawned on creation
+- [ ] Runs every 60 seconds
+- [ ] Removes expired entries
+- [ ] Handles eviction correctly
+- [ ] Doesn't block operations
 
-### Circuit Breaker
-- [ ] Opens after failures: [YES/NO - threshold: ___]
-- [ ] Closes after success: [YES/NO - threshold: ___]
-- [ ] Half-open state works: [YES/NO]
-- [ ] Metrics track state: [YES/NO]
+### Thread Safety
+- [ ] All operations use RwLock appropriately
+- [ ] No data races possible
+- [ ] Concurrent access tested
+- [ ] Performance acceptable under load
+- [ ] No deadlock scenarios
 
-### Degraded Mode
-- [ ] Cache TTL extends to 30min: [YES/NO - verified]
-- [ ] Fallback rules activate: [YES/NO]
-- [ ] No service disruption: [YES/NO]
-- [ ] Appropriate logging: [YES/NO - log samples]
+### Metrics
+- [ ] Cache size tracked
+- [ ] Hit/miss rates calculated
+- [ ] Operations counted
+- [ ] Metrics have low cardinality
+- [ ] No sensitive data in metrics
 
-### TDD Verification
-- [ ] Cache tests comprehensive: [YES/NO]
-- [ ] Circuit breaker tested: [YES/NO]
-- [ ] Integration tests exist: [YES/NO]
-- [ ] Failure scenarios covered: [YES/NO]
+### Resource Management
+- [ ] Memory usage bounded
+- [ ] No memory leaks
+- [ ] Cleanup task can't fail
+- [ ] Graceful shutdown supported
+- [ ] No zombie tasks
 
-### Issues Found
-[Detailed findings with impact]
+### Cleanliness Check
+- [ ] No test cache entries
+- [ ] No debug configuration
+- [ ] No performance hacks
+- [ ] Clean error handling
+- [ ] No magic numbers
 
-### Decision: [APPROVED / CHANGES REQUIRED]
+### Decision: [APPROVED / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
 ```
 
-### 🛑 CHECKPOINT 3: Complete Phase 4 System Review
+### 🛑 CHECKPOINT 3: SpiceDB Integration Review
 
-**What You're Reviewing**: Complete authorization system integration
+**What You're Reviewing**: SpiceDB client, circuit breaker, fallback rules, and resilience patterns
 
 **Key Specifications to Verify**:
-- All GraphQL operations check auth
-- Audit logging captures everything
-- Metrics provide visibility
-- System resilient to failures
-- Performance acceptable
+- Circuit breaker prevents cascade failures
+- Fallback rules are appropriately conservative
+- SpiceDB timeouts configured correctly
+- Connection pooling for gRPC works
+- Health checks integrated properly
+- No authorization bypasses in fallback
 
-**Required Comprehensive Tests**:
+**Required Tests** (MUST execute all and verify output):
 ```bash
-# Run verification script
-./scripts/verify-phase-4.sh
-# Should complete all checks
+# Start SpiceDB for testing
+just spicedb-up
 
-# Test complete auth flow
-cargo test --test auth_integration
+# Test SpiceDB client
+cargo test spicedb_tests::test_spicedb_permission_check
 
-# Audit log verification
-# Make several auth decisions
-# Check audit log contains all decisions
-tail -f /var/log/auth_audit.log | jq .
+# Test circuit breaker
+cargo test spicedb_tests::test_circuit_breaker_opens_on_failures
 
-# Performance test
-# Run 1000 requests, measure cache effectiveness
-ab -n 1000 -c 10 -H "Authorization: Bearer test_token" \
-  http://localhost:8080/graphql
+# Test fallback rules
+cargo test spicedb_tests::test_fallback_rules
+
+# Test health check
+cargo test spicedb_health_check_integration
+
+# Stop SpiceDB and test resilience
+just spicedb-down
+cargo test test_graceful_degradation
 ```
 
 **Resilience Testing**:
 ```bash
-# Test 1: SpiceDB outage handling
-docker stop spicedb
-# System should continue with fallback
-# Health checks still work
-# Writes are denied
-# Cache extends TTL
+# Simulate SpiceDB failures
+./scripts/test-circuit-breaker.sh
 
-# Test 2: SpiceDB recovery
-docker start spicedb
-# Circuit breaker should recover
-# Normal operations resume
-# Cache TTL returns to normal
+# Test fallback authorization
+./scripts/test-fallback-auth.sh
 
-# Test 3: High load
-# Generate many unique permission checks
-# Verify LRU eviction works
-# No memory leaks
+# Verify no cascading failures
+./scripts/chaos-test-spicedb.sh
 ```
 
-**Your Review Output Should Include**:
+**Review Checklist**:
 ```markdown
-## Phase 4 Complete System Review
+## Checkpoint 3 Review - SpiceDB Integration
 
-### Done Criteria Verification
-- [ ] All endpoints require authorization: [YES/NO - exceptions: ___]
-- [ ] SpiceDB permission checks working: [YES/NO]
-- [ ] Authorization caching reduces load: [YES/NO - metrics]
-- [ ] Proper 401 vs 403 responses: [YES/NO - tested]
-- [ ] Demo mode bypass functional: [YES/NO]
-- [ ] Circuit breaker prevents cascades: [YES/NO]
-- [ ] Fallback rules work: [YES/NO - tested scenarios]
-- [ ] Audit logging complete: [YES/NO - sample logs]
-- [ ] Metrics track performance: [YES/NO - metrics list]
+### SpiceDB Client
+- [ ] gRPC connection configured correctly
+- [ ] Authentication via preshared key
+- [ ] Timeouts reasonable (2s default)
+- [ ] Connection pooling enabled
+- [ ] Error handling comprehensive
 
-### Integration Testing
-- [ ] GraphQL resolvers use is_authorized: [YES/NO - count: ___]
-- [ ] Batch authorization for lists: [YES/NO]
-- [ ] Session extraction works: [YES/NO]
-- [ ] Error responses consistent: [YES/NO]
+### Circuit Breaker
+- [ ] Opens after 3 failures
+- [ ] Half-open after 5 seconds
+- [ ] Closes after 2 successes
+- [ ] State transitions correct
+- [ ] Metrics track state changes
 
-### Resilience Testing
-SpiceDB Outage:
-- [ ] System remains available: [YES/NO]
-- [ ] Fallback rules apply: [YES/NO]
-- [ ] Health checks work: [YES/NO]
-- [ ] Appropriate error messages: [YES/NO]
+### Fallback Rules
+- [ ] Read-only operations only
+- [ ] Owner can read own resources
+- [ ] No cross-user access
+- [ ] No write operations
+- [ ] Health checks always allowed
 
-Recovery:
-- [ ] Circuit breaker recovers: [YES/NO - time: ___]
-- [ ] Normal operations resume: [YES/NO]
-- [ ] No manual intervention needed: [YES/NO]
+### Integration
+- [ ] Helper uses circuit breaker
+- [ ] Fallback triggered correctly
+- [ ] Cache TTL extended during outage
+- [ ] Audit logs show correct source
+- [ ] Errors handled gracefully
 
-### Performance Analysis
-- [ ] Cache hit rate: ___% (target > 80%)
-- [ ] Average auth check latency: ___ms
-- [ ] P99 latency: ___ms
-- [ ] Requests per second: ___
-- [ ] Memory usage stable: [YES/NO]
+### Security in Degraded Mode
+- [ ] No privilege escalation
+- [ ] Conservative decisions only
+- [ ] Clear audit trail
+- [ ] No data leakage
+- [ ] Appropriate warnings logged
 
-### Audit & Compliance
-- [ ] All decisions logged: [YES/NO - verified how]
-- [ ] Log format structured: [YES/NO - sample]
-- [ ] No sensitive data in logs: [YES/NO]
-- [ ] Audit queries work: [YES/NO]
-- [ ] Retention policy defined: [YES/NO]
+### Performance
+- [ ] SpiceDB calls < 50ms p95
+- [ ] Circuit breaker adds < 1ms
+- [ ] Fallback decisions < 1ms
+- [ ] No blocking operations
+- [ ] Connection pool sized well
 
-### Security Review
-- [ ] Fail-secure implementation: [YES/NO]
-- [ ] No authorization bypasses: [YES/NO]
-- [ ] JWT validation proper: [YES/NO]
-- [ ] Demo mode production-safe: [YES/NO]
+### Cleanliness Check
+- [ ] No hardcoded endpoints
+- [ ] No test permissions
+- [ ] No SpiceDB test data
+- [ ] Clean connection handling
+- [ ] No temporary workarounds
 
-### Documentation Review
-- [ ] Architecture documented: [YES/NO]
-- [ ] SpiceDB schema clear: [YES/NO]
-- [ ] Troubleshooting guide: [YES/NO]
-- [ ] Metrics descriptions: [YES/NO]
+### Decision: [APPROVED / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
+```
 
-### Outstanding Issues
-[Any issues for Phase 5 consideration]
+### 🛑 CHECKPOINT 4: Complete Integration Review
 
-### Recommendations for Phase 5
-[Suggestions based on auth implementation]
+**What You're Reviewing**: Full authorization integration, GraphQL resolver updates, demo mode, and system verification
+
+**Key Specifications to Verify**:
+- All GraphQL operations use authorization
+- Demo mode properly gated by feature flag
+- Integration tests cover all scenarios
+- Performance benchmarks acceptable
+- No authorization bypasses exist
+- Production ready
+
+**Required Tests** (MUST execute all and verify output):
+```bash
+# Run full verification script
+./scripts/verify-phase-4.sh
+
+# Test all GraphQL operations
+cargo test integration_tests::test_full_authorization_flow
+
+# Test error responses
+cargo test integration_tests::test_unauthorized_returns_401
+cargo test integration_tests::test_forbidden_returns_403
+
+# Test demo mode
+cargo test --features demo integration_tests::test_demo_mode_bypass
+
+# Performance benchmarks
+cargo bench benchmark_authorization
+```
+
+**Production Readiness Validation**:
+```bash
+# Security scan
+cargo audit
+
+# Check for unwraps
+! grep -r "\.unwrap()" src/ --include="*.rs" | grep -v "^src/.*test"
+
+# Verify no demo in release
+cargo build --release 2>&1 | grep -q "Demo mode MUST NOT be enabled" && echo "PASS"
+
+# Load test authorization
+artillery run load-tests/auth-load-test.yml
+```
+
+**Review Checklist**:
+```markdown
+## Checkpoint 4 Review - Complete Integration
+
+### GraphQL Integration
+- [ ] All queries use is_authorized
+- [ ] All mutations check permissions
+- [ ] Subscriptions verify authorization
+- [ ] Consistent error handling
+- [ ] No bypasses or shortcuts
+
+### Demo Mode
+- [ ] Only enabled with feature flag
+- [ ] Compile error in release builds
+- [ ] Clear warning when enabled
+- [ ] All operations bypassed
+- [ ] No demo code in production paths
+
+### Integration Tests
+- [ ] Full auth flow tested
+- [ ] 401 vs 403 responses correct
+- [ ] Circuit breaker scenarios tested
+- [ ] Fallback rules tested
+- [ ] Cache behavior verified
+
+### Performance
+- [ ] Cache hit rate >90% in tests
+- [ ] Authorization <5ms p99 (cached)
+- [ ] Authorization <50ms p99 (SpiceDB)
+- [ ] No performance regressions
+- [ ] Benchmarks establish baseline
+
+### Security Validation
+- [ ] No authorization bypasses
+- [ ] All endpoints protected
+- [ ] Audit trail complete
+- [ ] No sensitive data leaks
+- [ ] Demo mode safe
+
+### Production Readiness
+- [ ] All tests passing
+- [ ] No security vulnerabilities
+- [ ] Documentation complete
+- [ ] Metrics and monitoring ready
+- [ ] Deployment guide updated
+
+### Final Cleanliness
+- [ ] No test data anywhere
+- [ ] No debug configurations
+- [ ] No temporary solutions
+- [ ] No outstanding TODOs
+- [ ] Code ready for production
 
 ### Decision: [APPROVED FOR PHASE 5 / CHANGES REQUIRED]
 
@@ -386,132 +511,166 @@ Date: [Date]
 Phase 4 Status: [COMPLETE / INCOMPLETE]
 ```
 
-## How to Handle Issues
+## Issue Severity Definitions
 
-When you find issues during review:
+**CRITICAL**: Blocks phase completion, MUST fix before approval
+- Authorization bypasses
+- Security vulnerabilities
+- Data leakage risks
+- System crashes or panics
+- Missing authentication checks
 
-1. **Categorize by severity**:
-   - **CRITICAL**: Security vulnerabilities, auth bypasses
-   - **HIGH**: Resilience failures, no audit logs
-   - **MEDIUM**: Performance issues, missing metrics
-   - **LOW**: Documentation, code style
+**HIGH**: Should fix before approval, MAY approve with immediate remediation plan
+- Missing tests for critical paths
+- Performance degradation >20%
+- Incomplete error handling
+- Thread safety issues
+- Missing audit logs
 
-2. **Test security thoroughly**:
-   - Can auth be bypassed? (CRITICAL)
-   - Do fallback rules expose data? (CRITICAL)
-   - Are denials cached? (HIGH)
-   - Is audit logging complete? (HIGH)
+**MEDIUM**: Should fix within phase, MAY defer if documented
+- Missing documentation
+- Code style inconsistencies
+- Non-critical test coverage gaps
+- Minor performance issues
+- Incomplete metrics
 
-3. **Provide specific fixes**:
-   ```markdown
-   Issue: Negative results being cached
-   Severity: HIGH
-   Fix: Add check in cache.set():
-   ```rust
-   if !allowed {
-       return; // Never cache negative results
-   }
-   ```
+**LOW**: Track for future improvement
+- Optimization opportunities
+- Nice-to-have features
+- Code refactoring suggestions
+- Enhanced monitoring
+
+## How to Test Authorization Scenarios
+
+### Authentication Testing
+```bash
+# Test missing authentication
+curl -X POST http://localhost:8080/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ notes { edges { node { id } } } }"}' \
+  | jq '.errors[0].extensions.code' # Should be "UNAUTHORIZED"
+
+# Test with authentication
+curl -X POST http://localhost:8080/graphql \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: alice" \
+  -d '{"query":"{ notes { edges { node { id } } } }"}' \
+  | jq '.data' # Should return results
+```
+
+### Authorization Testing
+```bash
+# Setup test permissions in SpiceDB
+zed relationship create notes:123 owner user:alice
+zed relationship create notes:456 owner user:bob
+
+# Test authorized access
+curl -X POST http://localhost:8080/graphql \
+  -H "x-user-id: alice" \
+  -d '{"query":"{ note(id: \"123\") { title } }"}' # Should work
+
+# Test unauthorized access
+curl -X POST http://localhost:8080/graphql \
+  -H "x-user-id: alice" \
+  -d '{"query":"{ note(id: \"456\") { title } }"}' # Should be FORBIDDEN
+```
+
+### Circuit Breaker Testing
+```bash
+# Stop SpiceDB to trigger circuit breaker
+docker stop spicedb
+
+# Make several requests to open circuit
+for i in {1..5}; do
+  curl -X POST http://localhost:8080/graphql \
+    -H "x-user-id: alice" \
+    -d '{"query":"{ note(id: \"alice:123\") { title } }"}'
+done
+
+# Check metrics for circuit state
+curl -s http://localhost:8080/metrics | grep circuit_breaker_state
+```
+
+## Common Issues to Watch For
+
+### Authorization Issues
+1. **Missing auth checks**: Every GraphQL operation must call is_authorized
+2. **Wrong resource format**: Must be "type:id" format
+3. **Cache key format**: Must be "user:resource:action"
+4. **Negative caching**: Never cache authorization denials
+5. **Demo mode leaks**: No demo code in production builds
+
+### Performance Issues
+1. **Cache misses**: Should be <10% after warm-up
+2. **SpiceDB latency**: Check connection pooling
+3. **Circuit breaker too sensitive**: Adjust thresholds
+4. **Memory growth**: Check cache eviction
+5. **Slow fallback**: Fallback should be instant
+
+### Security Issues
+1. **Information leakage**: Error messages revealing system details
+2. **Timing attacks**: Consistent response times
+3. **Privilege escalation**: Fallback rules too permissive
+4. **Missing audit logs**: Every decision must be logged
+5. **Token exposure**: Never log authentication tokens
 
 ## Review Decision Framework
 
 ### APPROVED
-Grant approval when:
-- All Done Criteria met
-- Security implementation solid
-- Resilience patterns work
-- Performance acceptable
-- Only LOW severity issues
+Grant approval ONLY when ALL of the following are met:
+- All checklist items pass
+- No CRITICAL or HIGH issues
+- Tests achieve >95% coverage on auth paths
+- Security review finds no vulnerabilities
+- Performance meets requirements
+- No cleanliness issues found
+
+### APPROVED WITH CONDITIONS
+MAY grant conditional approval when:
+- All CRITICAL issues resolved
+- Plan exists for HIGH issues
+- MEDIUM issues documented
+- Timeline for fixes agreed
+- No security risks
 
 ### CHANGES REQUIRED
-Require changes when:
-- Security vulnerabilities found
-- Auth can be bypassed
-- No resilience to failures
-- Audit logging incomplete
-- Any CRITICAL or HIGH issues
+MUST require changes when:
+- Any CRITICAL issues found
+- Security vulnerabilities exist
+- Authorization can be bypassed
+- Tests failing or insufficient
+- Major cleanliness issues
+- Performance unacceptable
 
-## Testing Authorization Resilience
+## Final Phase 4 Validation
 
-Critical scenarios that MUST be tested:
+Before approving Phase 4 completion:
+1. Manually test authorization on all endpoints
+2. Verify audit logs capture all decisions
+3. Simulate SpiceDB outage and test fallback
+4. Check cache metrics and hit rates
+5. Ensure no authorization bypasses exist
+6. Validate demo mode is development-only
+7. Confirm production deployment ready
 
-1. **SpiceDB Unavailable at Startup**
-   - Server should start successfully
-   - Health checks should work
-   - Fallback rules should apply
-   - Clear logging of degraded state
+## Recovery Guidance for Reviewers
 
-2. **SpiceDB Fails During Operation**
-   - Existing cache continues working
-   - New requests use fallback
-   - Circuit breaker activates
-   - Automatic recovery when available
+### When Tests Fail
+1. Check if SpiceDB is running (`docker ps`)
+2. Verify test database has fixtures
+3. Check for port conflicts
+4. Review test logs for details
 
-3. **Cache Overflow**
-   - LRU eviction activates
-   - Performance remains stable
-   - No memory leaks
-   - Metrics show evictions
+### When Integration Fails
+1. Verify all components running
+2. Check configuration alignment
+3. Review integration test setup
+4. Trace through auth flow
 
-4. **High Permission Churn**
-   - Many unique permission checks
-   - Cache remains effective
-   - No thundering herd on SpiceDB
+### When Performance is Poor
+1. Check cache configuration
+2. Verify SpiceDB connection pooling
+3. Look for synchronous operations
+4. Profile authorization path
 
-## Final Review Checklist
-
-Before submitting your review:
-- [ ] Tested all authorization flows
-- [ ] Verified resilience patterns
-- [ ] Checked cache effectiveness
-- [ ] Validated audit completeness
-- [ ] Reviewed security implementation
-- [ ] Tested degraded mode operation
-- [ ] Made clear APPROVED/CHANGES REQUIRED decision
-- [ ] Included specific remediation if needed
-
-## Template for Review Submission
-
-```markdown
-# Phase 4 - Checkpoint [N] Review
-
-**Reviewer**: [Your designation]
-**Date**: [Current date]
-**Implementation Agent**: [Agent who requested review]
-
-## Review Summary
-[2-3 sentences summarizing authorization implementation state]
-
-## Detailed Findings
-[Your complete review output for this checkpoint]
-
-## Security Assessment
-- Authorization enforcement: [Complete/Gaps found]
-- Error handling: [Secure/Information leaks]
-- Audit trail: [Complete/Missing decisions]
-- Demo mode: [Safe/Security risks]
-
-## Resilience Assessment
-- Circuit breaker: [Working/Issues]
-- Fallback rules: [Conservative/Too permissive]
-- Cache effectiveness: [High/Low - metrics]
-- Degraded operation: [Smooth/Disrupted]
-
-## Required Actions
-1. [Specific action with priority]
-2. [Specific action with priority]
-
-## Decision
-**[APPROVED / CHANGES REQUIRED]**
-
-[If CHANGES REQUIRED]
-The implementing agent must:
-1. [Specific requirement]
-2. [Specific requirement]
-3. Request re-review when complete
-
-[If APPROVED]
-The implementing agent may proceed to [next checkpoint/phase].
-```
-
-Remember: Authorization is critical for security. Be thorough in testing all flows, especially failure scenarios. The system must remain secure even when degraded.
+Remember: Phase 4 establishes the security foundation for the entire API. Be thorough in review, as authorization bugs can have severe consequences.

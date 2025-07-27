@@ -4,6 +4,9 @@ use tokio::sync::{RwLock, Semaphore};
 use futures::future::BoxFuture;
 use crate::services::database::DatabaseError;
 
+#[cfg(feature = "metrics-basic")]
+use crate::services::database::metrics::feature_metrics;
+
 /// Exponential backoff with jitter for retry logic
 pub struct ExponentialBackoff {
     attempt: u32,
@@ -72,6 +75,7 @@ impl Default for PoolConfig {
 }
 
 /// Pooled connection wrapper
+#[derive(Clone, Debug)]
 pub struct PooledConnection {
     pub id: String,
     pub created_at: Instant,
@@ -164,7 +168,6 @@ pub struct ConnectionPool {
     config: PoolConfig,
     connections: Arc<RwLock<Vec<PooledConnection>>>,
     semaphore: Arc<Semaphore>,
-    metrics: Arc<RwLock<PoolMetrics>>,
     health_monitor: Arc<RwLock<HealthMonitor>>,
 }
 
@@ -176,7 +179,6 @@ impl ConnectionPool {
             config,
             connections: Arc::new(RwLock::new(Vec::new())),
             semaphore,
-            metrics: Arc::new(RwLock::new(PoolMetrics::new())),
             health_monitor: Arc::new(RwLock::new(HealthMonitor::new())),
         }
     }
@@ -186,6 +188,10 @@ impl ConnectionPool {
         for i in 0..self.config.min_connections {
             self.create_connection(&format!("init-{}", i)).await?;
         }
+        
+        // Record initial pool size in metrics
+        #[cfg(feature = "metrics-basic")]
+        feature_metrics::record_pool_size(self.config.min_connections as u64);
         
         // Start background health monitoring (in a real implementation)
         self.start_health_monitor().await;
@@ -198,12 +204,63 @@ impl ConnectionPool {
         let active = connections.iter().filter(|c| c.is_healthy).count();
         let idle = connections.len() - active;
         
+        // Update metrics
+        #[cfg(feature = "metrics-basic")]
+        {
+            feature_metrics::record_active_connections(active as u64);
+            feature_metrics::record_idle_connections(idle as u64);
+            feature_metrics::record_pool_size(connections.len() as u64);
+        }
+        
         PoolMetrics {
             total_connections: connections.len(),
             active_connections: active,
             idle_connections: idle,
             failed_connections: 0, // Would be tracked in real implementation
         }
+    }
+    
+    /// Acquire a connection from the pool, respecting semaphore limits
+    pub async fn acquire_connection(&self) -> Result<PooledConnection, DatabaseError> {
+        // First check if we can acquire a permit from the semaphore
+        let permit = self.semaphore.try_acquire()
+            .map_err(|_| DatabaseError::ConnectionFailed("Pool exhausted - no permits available".to_string()))?;
+        
+        let mut connections = self.connections.write().await;
+        
+        // Find and return a healthy connection
+        for (_index, conn) in connections.iter_mut().enumerate() {
+            if conn.is_healthy {
+                conn.mark_used();
+                // Keep the permit alive with the connection
+                std::mem::forget(permit); // In real implementation, permit would be tied to connection lifetime
+                return Ok(conn.clone());
+            }
+        }
+        
+        // If no healthy connections and we can create more
+        if connections.len() < self.config.max_connections {
+            let new_conn = PooledConnection::new(format!("conn-{}", connections.len()));
+            connections.push(new_conn.clone());
+            
+            #[cfg(feature = "metrics-basic")]
+            feature_metrics::record_pool_size(connections.len() as u64);
+            
+            // Keep the permit alive with the connection
+            std::mem::forget(permit); // In real implementation, permit would be tied to connection lifetime
+            Ok(new_conn)
+        } else {
+            #[cfg(feature = "metrics-basic")]
+            feature_metrics::increment_failed_connections();
+            
+            Err(DatabaseError::ConnectionFailed("Pool exhausted".to_string()))
+        }
+    }
+    
+    /// Record a connection failure
+    pub async fn record_connection_failure(&self) {
+        #[cfg(feature = "metrics-basic")]
+        feature_metrics::increment_connection_errors();
     }
     
     async fn create_connection(&self, id: &str) -> Result<(), DatabaseError> {
@@ -503,5 +560,117 @@ mod tests {
             std::env::remove_var("STARTUP_MAX_WAIT");
             std::env::remove_var("DB_OPERATION_TIMEOUT");
         }
+    }
+    
+    #[tokio::test]
+    async fn test_pool_exhaustion() {
+        let config = PoolConfig {
+            min_connections: 1,
+            max_connections: 2,
+            ..Default::default()
+        };
+        
+        let pool = ConnectionPool::new(config);
+        pool.initialize().await.unwrap();
+        
+        // Acquire first connection - should succeed
+        let conn1 = pool.acquire_connection().await;
+        assert!(conn1.is_ok());
+        
+        // Acquire second connection - should succeed
+        let conn2 = pool.acquire_connection().await;
+        assert!(conn2.is_ok());
+        
+        // Try to acquire third connection - should fail due to pool exhaustion
+        let conn3 = pool.acquire_connection().await;
+        assert!(conn3.is_err());
+        match conn3.unwrap_err() {
+            DatabaseError::ConnectionFailed(msg) => assert!(msg.contains("Pool exhausted")),
+            _ => panic!("Expected ConnectionFailed error"),
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_concurrent_pool_access() {
+        let config = PoolConfig {
+            min_connections: 2,
+            max_connections: 5,
+            ..Default::default()
+        };
+        
+        let pool = Arc::new(ConnectionPool::new(config));
+        pool.initialize().await.unwrap();
+        
+        let mut handles = vec![];
+        
+        // Spawn 10 concurrent tasks trying to acquire connections
+        for i in 0..10 {
+            let pool_clone = Arc::clone(&pool);
+            let handle = tokio::spawn(async move {
+                let result = pool_clone.acquire_connection().await;
+                (i, result.is_ok())
+            });
+            handles.push(handle);
+        }
+        
+        // Wait for all tasks to complete
+        let mut successful_acquisitions = 0;
+        for handle in handles {
+            let (_task_id, success) = handle.await.unwrap();
+            if success {
+                successful_acquisitions += 1;
+            }
+        }
+        
+        // Some acquisitions should succeed, but not more than max_connections
+        assert!(successful_acquisitions > 0);
+        assert!(successful_acquisitions <= 5); // max_connections
+    }
+    
+    #[tokio::test]
+    async fn test_metrics_integration() {
+        let config = PoolConfig {
+            min_connections: 2,
+            max_connections: 4,
+            ..Default::default()
+        };
+        
+        let pool = ConnectionPool::new(config);
+        pool.initialize().await.unwrap();
+        
+        // Check health to trigger metrics update
+        let health = pool.health().await;
+        assert_eq!(health.total_connections, 2);
+        assert_eq!(health.active_connections, 2);
+        
+        // Record a failure
+        pool.record_connection_failure().await;
+        
+        // Test passes if no panics occur (metrics are working)
+    }
+    
+    #[tokio::test]
+    async fn test_semaphore_limiting() {
+        let config = PoolConfig {
+            min_connections: 1,
+            max_connections: 2,
+            acquire_timeout: Duration::from_millis(100),
+            ..Default::default()
+        };
+        
+        let pool = Arc::new(ConnectionPool::new(config));
+        pool.initialize().await.unwrap();
+        
+        // Acquire connections up to the limit
+        let _conn1 = pool.acquire_connection().await.unwrap();
+        let _conn2 = pool.acquire_connection().await.unwrap();
+        
+        // This should fail due to semaphore limiting
+        let start_time = Instant::now();
+        let conn3_result = pool.acquire_connection().await;
+        
+        // Should fail relatively quickly due to pool exhaustion
+        assert!(conn3_result.is_err());
+        assert!(start_time.elapsed() < Duration::from_secs(1));
     }
 }
