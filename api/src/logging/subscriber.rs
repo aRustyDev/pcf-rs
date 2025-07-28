@@ -9,6 +9,10 @@ use uuid::Uuid;
 use crate::config::LoggingConfig;
 
 /// Generate a unique trace ID for request correlation
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `observability::logging::current_trace_id()` instead. This function will be removed in a future version."
+)]
 pub fn generate_trace_id() -> String {
     Uuid::new_v4().to_string()
 }
@@ -23,6 +27,10 @@ pub fn generate_trace_id() -> String {
 /// - Environment-based log level filtering
 /// - Format selection based on config
 /// - Async, non-blocking logging
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `observability::logging::init_logging()` instead. This function will be removed in a future version."
+)]
 pub fn setup_tracing(config: &LoggingConfig) -> Result<()> {
     // Create environment filter from log level
     let env_filter = EnvFilter::try_from_default_env()

@@ -1,9 +1,44 @@
+//! DEPRECATED: This module is being replaced by observability::logging
+//! Please use the new structured logging system for all new code.
+//! 
+//! The new system provides:
+//! - Better performance with compiled regex patterns
+//! - More comprehensive sanitization rules
+//! - JSON format for production, pretty format for development
+//! - Integration with tracing spans and OpenTelemetry
+//! 
+//! Migration guide:
+//! ```rust
+//! // Old usage:
+//! use crate::logging::{setup_tracing, sanitize_log_message};
+//! 
+//! // New usage:
+//! use crate::observability::logging::{init_logging, LoggingConfig};
+//! ```
+
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `observability::logging` instead. This module will be removed in a future version."
+)]
 pub mod sanitization;
+
+#[deprecated(
+    since = "0.1.0", 
+    note = "Use `observability::logging` instead. This module will be removed in a future version."
+)]
 pub mod subscriber;
+
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `observability::logging` instead. This module will be removed in a future version."
+)]
 pub mod tracing;
 
+#[allow(deprecated)]
 pub use sanitization::*;
+#[allow(deprecated)]
 pub use subscriber::*;
+#[allow(deprecated)]
 pub use tracing::*;
 
 #[cfg(test)]

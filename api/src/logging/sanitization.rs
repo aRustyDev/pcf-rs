@@ -15,6 +15,10 @@ pub struct SanitizationPatterns {
 static PATTERNS: OnceLock<SanitizationPatterns> = OnceLock::new();
 
 /// Get compiled regex patterns for sanitization
+#[deprecated(
+    since = "0.1.0",
+    note = "Use `observability::logging::default_sanitization_rules()` instead. This function will be removed in a future version."
+)]
 pub fn get_patterns() -> &'static SanitizationPatterns {
     PATTERNS.get_or_init(|| SanitizationPatterns {
         // Email addresses - keep domain visible
@@ -56,6 +60,10 @@ pub fn get_patterns() -> &'static SanitizationPatterns {
 /// - Password fields (shows field=[REDACTED])
 /// - IP addresses (shows subnet only like 192.168.x.x)
 /// - User paths (shows /[USER]/)
+#[deprecated(
+    since = "0.1.0",
+    note = "Use the `observability::logging` system with automatic sanitization instead. This function will be removed in a future version."
+)]
 pub fn sanitize_log_message(message: &str) -> String {
     let patterns = get_patterns();
     let mut result = message.to_string();

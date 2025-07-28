@@ -1,9 +1,21 @@
+pub mod auth;
 pub mod config;
 pub mod error;
+pub mod graphql;
 pub mod health;
+pub mod helpers;
 pub mod logging;
+pub mod middleware;
+pub mod observability;
+pub mod schema;
 pub mod server;
 pub mod services;
+
+#[cfg(test)]
+pub mod tests;
+
+#[cfg(feature = "benchmarks")]
+pub mod benchmarks;
 
 pub use config::*;
 pub use error::*;
@@ -12,20 +24,15 @@ pub use server::*;
 
 use anyhow::Result;
 use std::panic;
+use crate::auth::components::AuthorizationComponents;
 
 /// Main server entry point for library usage
 pub async fn run_server() -> Result<()> {
-    // Initialize logging FIRST
-    let config = config::LoggingConfig {
-        level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
-        format: match std::env::var("ENVIRONMENT").as_deref() {
-            Ok("development") => "pretty",
-            _ => "json",
-        }.to_string(),
-    };
+    // Logging is now initialized in observability::init_observability()
     
-    // Initialize logging if not already done (for tests)
-    let _ = logging::setup_tracing(&config);
+    // Initialize observability
+    observability::init_observability()?;
+    ::tracing::info!("Observability initialized");
     
     // Set up panic handler (so it can use logging)
     panic::set_hook(Box::new(|panic_info| {
@@ -38,8 +45,17 @@ pub async fn run_server() -> Result<()> {
     // Load configuration
     let app_config = config::load_config()?;
     
-    // Start server
-    server::start_server(app_config).await?;
+    // Create authorization components
+    let auth_components = if app_config.demo.is_enabled() {
+        ::tracing::warn!("Creating demo authorization components (DEMO MODE)");
+        AuthorizationComponents::new_demo(&app_config.authorization).await?
+    } else {
+        ::tracing::info!("Creating production authorization components");
+        AuthorizationComponents::new_production(&app_config.authorization).await?
+    };
+    
+    // Start server with auth components
+    server::start_server(app_config, auth_components).await?;
     
     Ok(())
 }

@@ -24,6 +24,10 @@ serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# Metrics
+metrics = "0.23"
+metrics-exporter-prometheus = { version = "0.15", features = ["http-listener"] }
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
@@ -43,11 +47,36 @@ lazy_static = "1.4"
 futures = "0.3"
 rand = "0.8"
 
+# Data models and validation (for Checkpoint 3)
+surrealdb = { version = "2.1", features = ["kv-mem"] }
+ulid = "1.1"
+
+# Write queue persistence (for Checkpoint 4)
+bincode = "1.3"
+
+# GraphQL dependencies (for Phase 3)
+async-graphql = { version = "7.0", features = ["chrono", "uuid", "log", "dataloader"] }
+async-graphql-axum = "7.0"
+async-stream = "0.3"
+base64 = "0.22"
+
+# Optional dependencies for benchmarks
+criterion = { version = "0.5", features = ["html_reports"], optional = true }
+
 [dev-dependencies]
 reqwest = { version = "0.11", features = ["json"] }
+tempfile = "3.0"
+tracing-test = "0.2"
+tokio-test = "0.4"
 
 [features]
 demo = []
+benchmarks = ["dep:criterion"]
 metrics-basic = []
 metrics-detailed = ["metrics-basic"]
 metrics-all = ["metrics-detailed"]
+
+[[bench]]
+name = "authorization"
+harness = false
+required-features = ["benchmarks"]
