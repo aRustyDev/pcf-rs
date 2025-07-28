@@ -39,7 +39,6 @@
 //! );
 //! ```
 
-use std::sync::Arc;
 use tracing::{Event, Subscriber};
 use tracing_subscriber::{
     layer::SubscriberExt,
@@ -158,7 +157,7 @@ impl<S> Layer<S> for SanitizationLayer
 where
     S: Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
-    fn on_event(&self, event: &Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
+    fn on_event(&self, event: &Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
         // Create a sanitizing visitor to process the event fields
         let mut visitor = SanitizingVisitor::new(&self.rules);
         event.record(&mut visitor);

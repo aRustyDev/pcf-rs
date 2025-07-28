@@ -92,8 +92,10 @@ struct ParsedResource {
     /// Resource namespace/owner (if applicable)
     namespace: Option<String>,
     /// Resource identifier
+    #[allow(dead_code)]
     resource_id: String,
     /// Original resource string
+    #[allow(dead_code)]
     original: String,
 }
 
@@ -105,6 +107,7 @@ struct ParsedSubject {
     /// Subject identifier
     subject_id: String,
     /// Original subject string
+    #[allow(dead_code)]
     original: String,
 }
 

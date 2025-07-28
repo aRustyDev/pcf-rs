@@ -219,6 +219,7 @@ pub trait SpiceDBClientTrait: Send + Sync {
 #[derive(Clone)]
 pub struct SpiceDBClient {
     // client: Arc<PermissionsServiceClient<Channel>>,
+    #[allow(dead_code)]
     config: SpiceDBConfig,
     stats: Arc<tokio::sync::RwLock<SpiceDBStats>>,
 }
