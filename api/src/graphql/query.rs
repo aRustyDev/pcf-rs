@@ -4,6 +4,7 @@ use crate::graphql::context::ContextExt;
 use crate::graphql::pagination::query_notes_paginated;
 use crate::helpers::authorization::is_authorized;
 use crate::schema::Note;
+use tracing::{info_span, Span};
 
 /// Root query type for GraphQL schema
 pub struct Query;
@@ -34,12 +35,41 @@ impl Query {
     }
     
     /// Get a single note by ID
+    #[tracing::instrument(
+        skip(self, ctx, id),
+        fields(
+            operation.type = "query",
+            operation.name = "note",
+            input.id = tracing::field::Empty,
+            user.id = tracing::field::Empty
+        )
+    )]
     async fn note(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Note>> {
+        let span = Span::current();
+        span.record("input.id", &id.to_string());
+        
         // Check authorization for reading this specific note
+        let _auth_span = info_span!(
+            "authorization_check",
+            resource = %format!("notes:{}", id.to_string()),
+            action = "read"
+        );
         is_authorized(ctx, &format!("notes:{}", id.to_string()), "read").await?;
         
         let context = ctx.get_context()?;
         
+        // Record user context if available
+        if let Ok(current_user) = context.get_current_user() {
+            span.record("user.id", &current_user);
+        }
+        
+        // Database read with span
+        let _db_span = info_span!(
+            "database_operation",
+            db.operation = "read",
+            db.table = "notes",
+            db.key = %id.to_string()
+        );
         let note_data = context.database
             .read("notes", &id.to_string())
             .await

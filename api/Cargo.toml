@@ -24,6 +24,12 @@ serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+# OpenTelemetry distributed tracing
+opentelemetry = "0.23"
+opentelemetry_sdk = { version = "0.23", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.16", features = ["tonic"] }
+tracing-opentelemetry = "0.24"
+
 # Metrics
 metrics = "0.23"
 metrics-exporter-prometheus = { version = "0.15", features = ["http-listener"] }

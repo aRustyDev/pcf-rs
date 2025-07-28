@@ -1,6 +1,8 @@
 pub mod circuit_breaker;
+pub mod tracing;
 
 pub use circuit_breaker::*;
+pub use tracing::*;
 
 use crate::observability::metrics::record_http_request;
 use std::time::Instant;
@@ -9,8 +11,8 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-
 /// Middleware to record HTTP request metrics
+/// Note: Distributed tracing is now handled automatically via OpenTelemetry integration
 pub async fn metrics_middleware(
     req: Request,
     next: Next,

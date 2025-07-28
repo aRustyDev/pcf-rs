@@ -9,6 +9,7 @@ use tracing;
 
 use super::recorder::{init_metrics, MetricsConfig};
 use super::logging::{init_logging, LoggingConfig};
+use super::tracing::{init_tracing, TracingConfig};
 
 /// Initialize observability components based on environment configuration
 pub fn init_observability() -> Result<()> {
@@ -27,6 +28,26 @@ pub fn init_observability() -> Result<()> {
     
     init_logging(&logging_config)
         .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {}", e))?;
+    
+    // Initialize distributed tracing (after logging)
+    let tracing_config = TracingConfig {
+        otlp_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+            .unwrap_or_else(|_| "http://localhost:4317".to_string()),
+        sample_rate: env::var("OTEL_SAMPLE_RATE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.1), // Default to 10% sampling
+        service_name: "pcf-api".to_string(),
+        service_version: env!("CARGO_PKG_VERSION").to_string(),
+        environment: environment.clone(),
+        enabled: env::var("OTEL_TRACES_ENABLED")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(true),
+        export_timeout: std::time::Duration::from_secs(10),
+    };
+    
+    init_tracing(&tracing_config)
+        .map_err(|e| anyhow::anyhow!("Failed to initialize tracing: {}", e))?;
     
     // Initialize metrics with configuration from environment
     let metrics_config = MetricsConfig {
@@ -52,6 +73,9 @@ pub fn init_observability() -> Result<()> {
         environment = %environment,
         json_logging = %is_production,
         sanitization = %logging_config.enable_sanitization,
+        tracing_enabled = %tracing_config.enabled,
+        otlp_endpoint = %tracing_config.otlp_endpoint,
+        sample_rate = %tracing_config.sample_rate,
         "Observability components initialized successfully"
     );
     Ok(())

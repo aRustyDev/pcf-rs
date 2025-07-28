@@ -2,6 +2,7 @@ use async_graphql::*;
 use crate::graphql::context::ContextExt;
 use crate::helpers::authorization::is_authorized;
 use crate::schema::Note;
+use tracing::{info_span, Span};
 
 /// Root mutation type for GraphQL schema
 pub struct Mutation;
@@ -9,12 +10,28 @@ pub struct Mutation;
 #[Object]
 impl Mutation {
     /// Create a new note
+    #[tracing::instrument(
+        skip(self, ctx, input),
+        fields(
+            operation.type = "mutation",
+            operation.name = "createNote",
+            input.title_length = %input.title.len(),
+            user.id = tracing::field::Empty
+        )
+    )]
     async fn create_note(
         &self,
         ctx: &Context<'_>,
         input: CreateNoteInput,
     ) -> Result<CreateNotePayload> {
+        let span = Span::current();
+        
         // Check authorization for creating notes
+        let _auth_span = info_span!(
+            "authorization_check",
+            resource = "notes:*",
+            action = "create"
+        );
         is_authorized(ctx, "notes:*", "create").await?;
         
         let context = ctx.get_context()?;
@@ -25,6 +42,9 @@ impl Mutation {
         // Get current user from session
         let current_user = context.get_current_user()?;
         
+        // Record user ID in the span
+        span.record("user.id", &current_user);
+        
         // Create new note
         let note = Note::new(
             input.title,
@@ -33,7 +53,12 @@ impl Mutation {
             input.tags.unwrap_or_default(),
         );
         
-        // Store in database
+        // Store in database with span
+        let _db_span = info_span!(
+            "database_operation",
+            db.operation = "create",
+            db.table = "notes"
+        );
         let note_data = serde_json::to_value(&note)
             .map_err(|e| Error::new(format!("Failed to serialize note: {}", e)))?;
         
@@ -41,6 +66,9 @@ impl Mutation {
             .create("notes", note_data)
             .await
             .map_err(|e| Error::new(format!("Database error: {}", e)))?;
+        
+        // Record successful creation in span
+        span.record("result.note_id", &note.id);
         
         // Invalidate DataLoader cache for this author
         if let Ok(loaders) = ctx.data::<crate::graphql::dataloaders::DataLoaderRegistry>() {
