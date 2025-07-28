@@ -4,7 +4,6 @@ pub mod error;
 pub mod graphql;
 pub mod health;
 pub mod helpers;
-pub mod logging;
 pub mod middleware;
 pub mod observability;
 pub mod schema;
@@ -19,7 +18,6 @@ pub mod benchmarks;
 
 pub use config::*;
 pub use error::*;
-pub use logging::*;
 pub use server::*;
 
 use anyhow::Result;
