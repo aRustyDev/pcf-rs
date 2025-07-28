@@ -9,7 +9,7 @@ use axum::{
     response::Response,
 };
 use crate::observability::tracing::{extract_trace_context, inject_trace_context};
-use tracing::info_span;
+use tracing::{info_span, Instrument};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Middleware that extracts trace context from HTTP headers and creates spans
@@ -17,7 +17,12 @@ pub async fn trace_context_middleware(
     req: Request,
     next: Next,
 ) -> Response {
-    // Create span for tracing (without OpenTelemetry context operations that cause issues)
+    let mut req = req;
+    
+    // Extract trace context from headers - CRITICAL for distributed tracing
+    let trace_context = extract_trace_context(req.headers());
+    
+    // Attach context to span for correlation
     let span = info_span!(
         "http_request",
         method = %req.method(),
@@ -27,10 +32,20 @@ pub async fn trace_context_middleware(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("unknown")
     );
+    span.set_parent(trace_context.clone());
     
-    let _guard = span.entered();
-    let response = next.run(req).await;
-    response
+    // Store for GraphQL resolvers - CRITICAL for distributed tracing
+    req.extensions_mut().insert(trace_context);
+    
+    // Use .instrument() instead of .entered() to avoid Send + Sync issues
+    async move {
+        let mut response = next.run(req).await;
+        // Inject trace context for downstream services - CRITICAL for distributed tracing
+        inject_trace_context(response.headers_mut());
+        response
+    }
+    .instrument(span)
+    .await
 }
 
 #[cfg(test)]
