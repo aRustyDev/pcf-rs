@@ -8,28 +8,26 @@ use std::env;
 use tracing;
 
 use super::recorder::{init_metrics, MetricsConfig};
-use super::logging::{init_logging, LoggingConfig};
-use super::tracing::{init_tracing, TracingConfig};
+use super::logging::{LoggingConfig, default_sanitization_rules};
+use super::tracing::TracingConfig;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
-/// Initialize observability components based on environment configuration
+/// Initialize observability components with unified telemetry
 pub fn init_observability() -> Result<()> {
     let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
     let is_production = environment == "production";
     
-    // Initialize structured logging first (before any tracing calls)
+    // Create logging configuration
     let logging_config = LoggingConfig {
         level: env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
         json_format: is_production,
         enable_sanitization: env::var("LOG_SANITIZATION")
             .map(|v| v.to_lowercase() != "false")
             .unwrap_or(true), // Enable by default
-        sanitization_rules: super::logging::default_sanitization_rules(),
+        sanitization_rules: default_sanitization_rules(),
     };
     
-    init_logging(&logging_config)
-        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {}", e))?;
-    
-    // Initialize distributed tracing (after logging)
+    // Create tracing configuration
     let tracing_config = TracingConfig {
         otlp_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
             .unwrap_or_else(|_| "http://localhost:4317".to_string()),
@@ -46,8 +44,8 @@ pub fn init_observability() -> Result<()> {
         export_timeout: std::time::Duration::from_secs(10),
     };
     
-    init_tracing(&tracing_config)
-        .map_err(|e| anyhow::anyhow!("Failed to initialize tracing: {}", e))?;
+    // Initialize unified telemetry system (logging + tracing in one subscriber)
+    init_unified_telemetry(&logging_config, &tracing_config)?;
     
     // Initialize metrics with configuration from environment
     let metrics_config = MetricsConfig {
@@ -79,6 +77,91 @@ pub fn init_observability() -> Result<()> {
         "Observability components initialized successfully"
     );
     Ok(())
+}
+
+/// Initialize unified telemetry system with logging and tracing in a single subscriber
+pub fn init_unified_telemetry(
+    logging_config: &LoggingConfig,
+    tracing_config: &TracingConfig,
+) -> Result<()> {
+    use tracing_subscriber::util::SubscriberInitExt;
+    
+    // Start with environment filter
+    let env_filter = EnvFilter::new(&logging_config.level);
+    let subscriber = tracing_subscriber::registry().with(env_filter);
+    
+    // Handle combinations of json/pretty and tracing enabled/disabled
+    match (logging_config.json_format, tracing_config.enabled) {
+        (true, true) => {
+            let tracer = create_otlp_tracer(tracing_config)?;
+            let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+            subscriber
+                .with(tracing_subscriber::fmt::layer().json().with_current_span(true))
+                .with(telemetry_layer)
+                .init();
+        }
+        (true, false) => {
+            subscriber
+                .with(tracing_subscriber::fmt::layer().json().with_current_span(true))
+                .init();
+        }
+        (false, true) => {
+            let tracer = create_otlp_tracer(tracing_config)?;
+            let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+            subscriber
+                .with(tracing_subscriber::fmt::layer().pretty())
+                .with(telemetry_layer)
+                .init();
+        }
+        (false, false) => {
+            subscriber
+                .with(tracing_subscriber::fmt::layer().pretty())
+                .init();
+        }
+    }
+    
+    tracing::info!(
+        tracing_enabled = %tracing_config.enabled,
+        json_format = %logging_config.json_format,
+        "Unified telemetry system initialized"
+    );
+    
+    Ok(())
+}
+
+/// Create OTLP tracer for OpenTelemetry integration
+fn create_otlp_tracer(config: &TracingConfig) -> Result<opentelemetry_sdk::trace::Tracer> {
+    use opentelemetry::KeyValue;
+    use opentelemetry_otlp::WithExportConfig;
+    use opentelemetry_sdk::{
+        trace::{self, Sampler},
+        Resource,
+    };
+
+    // Create OTLP exporter
+    let exporter = opentelemetry_otlp::new_exporter()
+        .tonic()
+        .with_endpoint(&config.otlp_endpoint)
+        .with_timeout(config.export_timeout);
+
+    // Create tracer
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(exporter)
+        .with_trace_config(
+            trace::config()
+                .with_sampler(Sampler::TraceIdRatioBased(config.sample_rate))
+                .with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", config.service_name.clone()),
+                    KeyValue::new("service.version", config.service_version.clone()),
+                    KeyValue::new("environment", config.environment.clone()),
+                    KeyValue::new("telemetry.sdk.name", "opentelemetry"),
+                    KeyValue::new("telemetry.sdk.language", "rust"),
+                ]))
+        )
+        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+
+    Ok(tracer)
 }
 
 /// Parse IP allowlist from environment variable

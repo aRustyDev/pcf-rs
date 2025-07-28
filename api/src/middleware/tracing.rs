@@ -10,31 +10,37 @@ use axum::{
 };
 use crate::observability::tracing::{extract_trace_context, inject_trace_context};
 use tracing::info_span;
-use opentelemetry::trace::TraceContextExt;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Middleware that extracts trace context from HTTP headers and creates spans
 pub async fn trace_context_middleware(
-    request: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
-    // Create a span for this HTTP request
+    // Extract trace context from headers
+    let trace_context = extract_trace_context(req.headers());
+    
+    // Create span with parent context
     let span = info_span!(
         "http_request",
-        method = %request.method(),
-        path = %request.uri().path(),
-        user_agent = request.headers()
+        method = %req.method(),
+        path = %req.uri().path(),
+        user_agent = req.headers()
             .get("user-agent")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("unknown")
     );
     
-    // Attach the span to the current scope
+    // Attach context to span
+    span.set_parent(trace_context.clone());
+    
+    // Store for GraphQL resolvers
+    req.extensions_mut().insert(trace_context);
+    
     let _guard = span.entered();
+    let mut response = next.run(req).await;
     
-    // Process the request
-    let mut response = next.run(request).await;
-    
-    // Inject trace context into response headers for downstream services
+    // Inject for downstream services
     inject_trace_context(response.headers_mut());
     
     response

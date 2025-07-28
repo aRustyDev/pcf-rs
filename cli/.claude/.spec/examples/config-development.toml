@@ -1,0 +1,21 @@
+# Development Configuration Example
+# Overrides for local development convenience
+
+[server]
+port = 8080
+bind = "127.0.0.1"  # Localhost only for development
+shutdown_timeout = 5  # Faster shutdown for dev
+
+[logging]
+level = "debug"
+format = "pretty"  # Human-readable logs
+
+[health]
+liveness_path = "/health"
+readiness_path = "/health/ready"
+startup_timeout_seconds = 30  # Faster startup checks
+startup_check_interval_seconds = 1
+
+# Development-specific settings
+[demo]
+enabled = true  # Enable demo endpoints (compile-time check prevents in release)

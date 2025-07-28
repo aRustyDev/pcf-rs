@@ -12,7 +12,7 @@ use crate::config::AppConfig;
 use crate::health::{handlers::{liveness_handler, readiness_handler}, HealthManager};
 use crate::auth::components::AuthorizationComponents;
 use crate::observability::metrics_endpoint;
-use crate::middleware::metrics_middleware;
+use crate::middleware::{metrics_middleware, trace_context_middleware};
 
 /// Start the Axum HTTP server with health endpoints and graceful shutdown
 /// 
@@ -74,7 +74,9 @@ fn create_router(health_manager: HealthManager) -> Router {
         .route("/health/readiness", get(readiness_handler))   // Keep existing for compatibility
         // Add health manager state
         .with_state(health_manager)
-        // Add metrics and tracing middleware to all routes
+        // Add tracing middleware first for proper trace context
+        .layer(middleware::from_fn(trace_context_middleware))
+        // Add metrics middleware to all routes
         .layer(middleware::from_fn(metrics_middleware))
         // Add CORS middleware for browser requests
         .layer(

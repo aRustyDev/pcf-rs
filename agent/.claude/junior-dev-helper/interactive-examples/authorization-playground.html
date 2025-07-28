@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authorization Playground</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .status-item {
+            flex: 1;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .status-item.good { background: #d4edda; }
+        .status-item.bad { background: #f8d7da; }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover { background: #0056b3; }
+        .button.danger { background: #dc3545; }
+        .button.danger:hover { background: #c82333; }
+        .log {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .test-item {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .test-item:hover { background: #e9ecef; }
+        .test-item.allowed { background: #d4edda; }
+        .test-item.denied { background: #f8d7da; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Authorization Playground</h1>
+            <p>Interactive demonstration of authorization patterns with caching, circuit breakers, and fallback rules.</p>
+        </div>
+
+        <div class="status" id="status">
+            <div class="status-item">
+                <h3>Cache Hit Rate</h3>
+                <div id="cacheHitRate">0%</div>
+            </div>
+            <div class="status-item">
+                <h3>Circuit Breaker</h3>
+                <div id="circuitState">Closed</div>
+            </div>
+            <div class="status-item">
+                <h3>Current User</h3>
+                <div id="currentUser">alice</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>🧪 Test Scenarios</h2>
+                
+                <h3>Quick Tests</h3>
+                <div class="test-grid" id="quickTests">
+                    <div class="test-item" onclick="checkPermission('note:1', 'read')">
+                        Alice read note:1
+                    </div>
+                    <div class="test-item" onclick="checkPermission('note:1', 'write')">
+                        Alice write note:1
+                    </div>
+                    <div class="test-item" onclick="checkPermission('note:2', 'read')">
+                        Alice read note:2
+                    </div>
+                    <div class="test-item" onclick="checkPermission('user:alice', 'read')">
+                        Alice read profile
+                    </div>
+                    <div class="test-item" onclick="checkPermission('user:bob', 'read')">
+                        Alice read Bob's profile
+                    </div>
+                    <div class="test-item" onclick="checkPermission('health:status', 'read')">
+                        Health check
+                    </div>
+                </div>
+
+                <h3>Circuit Breaker Testing</h3>
+                <button class="button danger" onclick="simulateOutage(true)">
+                    🚨 Simulate SpiceDB Outage
+                </button>
+                <button class="button" onclick="simulateOutage(false)">
+                    ✅ Restore SpiceDB
+                </button>
+                
+                <h3>Cache Testing</h3>
+                <button class="button" onclick="runCacheTest()">
+                    💾 Test Cache Behavior
+                </button>
+                <button class="button" onclick="clearLogs()">
+                    🗑️ Clear Logs
+                </button>
+
+                <h3>Batch Testing</h3>
+                <button class="button" onclick="runBatchTest()">
+                    📦 Test Multiple Permissions
+                </button>
+            </div>
+
+            <div class="card">
+                <h2>📊 Results</h2>
+                
+                <h3>Recent Checks</h3>
+                <table id="recentChecks">
+                    <thead>
+                        <tr>
+                            <th>Resource</th>
+                            <th>Action</th>
+                            <th>Result</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <h3>Console Output</h3>
+                <div class="log" id="console"></div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>📚 What's Happening?</h2>
+            <div id="explanation">
+                <p>This playground demonstrates:</p>
+                <ul>
+                    <li><strong>Positive-only caching</strong> - Only successful authorization results are cached</li>
+                    <li><strong>Circuit breaker pattern</strong> - Fails fast when SpiceDB is down</li>
+                    <li><strong>Fallback rules</strong> - Conservative permissions during outages</li>
+                    <li><strong>Cache TTL extension</strong> - Longer cache during circuit breaker open state</li>
+                </ul>
+                <p>Try the different scenarios to see how the system behaves!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let logs = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.push(`[${timestamp}] ${message}`);
+            document.getElementById('console').innerText = logs.slice(-20).join('\n');
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/status');
+                const status = await response.json();
+                
+                document.getElementById('cacheHitRate').innerText = 
+                    `${(status.cache_stats.hit_rate * 100).toFixed(1)}%`;
+                
+                const circuitEl = document.getElementById('circuitState');
+                circuitEl.innerText = status.circuit_breaker.state.toUpperCase();
+                circuitEl.parentElement.className = 
+                    status.circuit_breaker.state === 'open' ? 'status-item bad' : 'status-item good';
+                
+            } catch (e) {
+                log('Failed to update status: ' + e.message);
+            }
+        }
+
+        async function checkPermission(resource, action) {
+            log(`Checking permission: ${resource} ${action}`);
+            
+            const query = `
+                query CheckPermission($resource: String!, $action: String!) {
+                    checkPermission(resource: $resource, action: $action) {
+                        resource
+                        action
+                        allowed
+                        source
+                    }
+                }
+            `;
+            
+            try {
+                const response = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query,
+                        variables: { resource, action }
+                    })
+                });
+                
+                const result = await response.json();
+                const check = result.data.checkPermission;
+                
+                log(`Result: ${check.allowed ? '✅ ALLOWED' : '❌ DENIED'} (from ${check.source})`);
+                
+                // Add to recent checks
+                addRecentCheck(check);
+                
+                // Update quick test visual
+                updateQuickTest(resource, action, check.allowed);
+                
+                // Update status
+                await updateStatus();
+                
+            } catch (e) {
+                log('Error: ' + e.message);
+            }
+        }
+
+        function addRecentCheck(check) {
+            const tbody = document.querySelector('#recentChecks tbody');
+            const row = tbody.insertRow(0);
+            
+            row.innerHTML = `
+                <td>${check.resource}</td>
+                <td>${check.action}</td>
+                <td>${check.allowed ? '✅' : '❌'}</td>
+                <td>${check.source}</td>
+            `;
+            
+            // Keep only last 10
+            while (tbody.rows.length > 10) {
+                tbody.deleteRow(tbody.rows.length - 1);
+            }
+        }
+
+        function updateQuickTest(resource, action, allowed) {
+            const tests = document.querySelectorAll('.test-item');
+            tests.forEach(test => {
+                if (test.innerText.toLowerCase().includes(resource) && 
+                    test.innerText.toLowerCase().includes(action)) {
+                    test.className = allowed ? 'test-item allowed' : 'test-item denied';
+                }
+            });
+        }
+
+        async function simulateOutage(enable) {
+            log(enable ? '🚨 Simulating SpiceDB outage...' : '✅ Restoring SpiceDB...');
+            
+            const mutation = `
+                mutation SimulateOutage($enable: Boolean!) {
+                    simulateOutage(enable: $enable)
+                }
+            `;
+            
+            try {
+                const response = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: mutation,
+                        variables: { enable }
+                    })
+                });
+                
+                const result = await response.json();
+                log(result.data.simulateOutage);
+                
+                if (enable) {
+                    log('Try some permission checks now - they should fail and activate the circuit breaker');
+                }
+                
+                await updateStatus();
+                
+            } catch (e) {
+                log('Error: ' + e.message);
+            }
+        }
+
+        async function runCacheTest() {
+            log('=== Starting Cache Test ===');
+            log('1. First check - should hit SpiceDB');
+            await checkPermission('note:1', 'read');
+            
+            setTimeout(async () => {
+                log('2. Second check - should hit cache');
+                await checkPermission('note:1', 'read');
+                
+                setTimeout(async () => {
+                    log('3. Check denied permission - should NOT be cached');
+                    await checkPermission('note:999', 'delete');
+                    
+                    setTimeout(async () => {
+                        log('4. Recheck denied - should hit SpiceDB again (not cached)');
+                        await checkPermission('note:999', 'delete');
+                    }, 1000);
+                }, 1000);
+            }, 1000);
+        }
+
+        async function runBatchTest() {
+            log('=== Running Batch Test ===');
+            const tests = [
+                ['note:1', 'read'],
+                ['note:1', 'write'],
+                ['note:2', 'read'],
+                ['user:alice', 'read'],
+                ['user:bob', 'read'],
+                ['health:status', 'read']
+            ];
+            
+            for (const [resource, action] of tests) {
+                await checkPermission(resource, action);
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        function clearLogs() {
+            logs = [];
+            document.getElementById('console').innerText = '';
+            log('Console cleared');
+        }
+
+        // Update status every 2 seconds
+        setInterval(updateStatus, 2000);
+        
+        // Initial status update
+        updateStatus();
+        log('Authorization Playground ready!');
+        log('Current user: alice');
+    </script>
+</body>
+</html>
