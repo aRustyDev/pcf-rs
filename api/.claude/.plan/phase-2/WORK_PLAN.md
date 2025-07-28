@@ -24,10 +24,22 @@ Key specifications in `/api/.claude/.spec/`:
 - **[error-handling.md](../../.spec/error-handling.md)** - Error type definitions and guidelines
 - **[metrics.md](../../.spec/metrics.md)** - Metrics collection requirements
 
+### Junior Developer Resources
+Comprehensive guides in `/api/.claude/junior-dev-helper/`:
+- **[Database Tutorial](../../junior-dev-helper/database-tutorial.md)** - Core concepts and implementation patterns
+- **[SurrealDB Guide](../../junior-dev-helper/surrealdb-guide.md)** - Thing IDs, queries, and best practices
+- **[Common Database Errors](../../junior-dev-helper/database-common-errors.md)** - Troubleshooting guide
+- **[Connection Pool Guide](../../junior-dev-helper/connection-pool-guide.md)** - Pooling patterns explained
+- **[Retry Patterns Guide](../../junior-dev-helper/retry-patterns-guide.md)** - Exponential backoff with jitter
+- **[Database TDD Examples](../../junior-dev-helper/database-tdd-examples.md)** - Test-driven development patterns
+- **[Async Database Patterns](../../junior-dev-helper/async-database-patterns.md)** - Async Rust with databases
+- **[TestContainers Guide](../../junior-dev-helper/testcontainers-guide.md)** - Integration testing with real databases
+
 ### Quick Links
 - **Verification Script**: `scripts/verify-phase-2.sh`
 - **Database Test Suite**: `scripts/test-database.sh`
 - **Connection Retry Test**: `scripts/test-connection-retry.sh`
+- **SurrealDB Quick Start**: See [SurrealDB Guide](../../junior-dev-helper/surrealdb-guide.md#setting-up-surrealdb)
 
 ## Overview
 This work plan implements the database layer with SurrealDB, focusing on reliability through infinite retry logic, configurable connection pooling, write queue persistence, and comprehensive metrics. The implementation follows TDD practices with clear checkpoint boundaries for review and correction.
@@ -95,6 +107,9 @@ At each checkpoint:
 - **Patterns**: Repository pattern, dependency injection, version checking
 
 #### Task 2.1.1: Write Database Trait Tests First
+
+💡 **Junior Developer Tip**: New to TDD with databases? Check out [Database TDD Examples](../../junior-dev-helper/database-tdd-examples.md) for step-by-step patterns!
+
 Create `src/services/database/mod.rs` with comprehensive test module. MUST write and run tests first to see them fail before implementing:
 ```rust
 #[cfg(test)]
@@ -126,6 +141,9 @@ mod tests {
 ```
 
 #### Task 2.1.2: Define Database Service Trait
+
+💡 **Junior Developer Tip**: Async traits can be tricky! See [Async Database Patterns](../../junior-dev-helper/async-database-patterns.md) for common pitfalls and solutions.
+
 Create the trait that all database implementations must follow:
 ```rust
 use async_trait::async_trait;
@@ -212,6 +230,9 @@ pub enum VersionCompatibility {
 ```
 
 #### Task 2.1.4: Implement Database Error Types
+
+⚠️ **Common Pitfall**: Database errors can be confusing! Check [Common Database Errors](../../junior-dev-helper/database-common-errors.md) when you hit issues.
+
 Define comprehensive error types following Phase 1 patterns:
 ```rust
 #[derive(Debug, thiserror::Error)]
@@ -309,6 +330,9 @@ mod connection_tests {
 ```
 
 #### Task 2.2.2: Implement Exponential Backoff with Jitter
+
+💡 **Junior Developer Tip**: Confused about exponential backoff? See [Retry Patterns Guide](../../junior-dev-helper/retry-patterns-guide.md) for visual explanations!
+
 Use the pattern from examples with enhancements:
 ```rust
 pub struct ExponentialBackoff {
@@ -350,6 +374,9 @@ impl ExponentialBackoff {
 ```
 
 #### Task 2.2.3: Implement Connection Pool
+
+💡 **Junior Developer Tip**: Connection pooling can be complex! Check out [Connection Pool Guide](../../junior-dev-helper/connection-pool-guide.md) for detailed explanations.
+
 Create configurable connection pool with health monitoring:
 ```rust
 pub struct ConnectionPool {
@@ -609,6 +636,9 @@ fn no_script_tags(value: &str, _: &()) -> garde::Result {
 ```
 
 #### Task 2.3.3: Implement SurrealDB ID Handling
+
+💡 **Junior Developer Tip**: Thing IDs are unique to SurrealDB! Learn about them in [SurrealDB Guide](../../junior-dev-helper/surrealdb-guide.md#thing-ids).
+
 Create ID type with proper conversions:
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -1036,6 +1066,9 @@ impl DatabaseService for SurrealDatabase {
 ```
 
 #### Task 2.5.2: Create Integration Tests
+
+💡 **Junior Developer Tip**: Learn how to test with real databases using [TestContainers Guide](../../junior-dev-helper/testcontainers-guide.md)!
+
 Comprehensive integration test suite:
 ```rust
 #[cfg(test)]
@@ -1255,6 +1288,23 @@ impl DatabaseMetrics {
 - **Slow queries**: Enable metrics-detailed to identify bottlenecks
 - **High memory**: Reduce pool size or queue limit
 - **Metric cardinality**: Check label combinations aren't exploding
+
+💡 **For detailed troubleshooting**, see [Common Database Errors](../../junior-dev-helper/database-common-errors.md)
+
+## Junior Developer Learning Path
+
+For junior developers new to database layers, here's a recommended learning path:
+
+1. **Start with Concepts** - Read [Database Tutorial](../../junior-dev-helper/database-tutorial.md) to understand the overall architecture
+2. **Learn SurrealDB** - Work through [SurrealDB Guide](../../junior-dev-helper/surrealdb-guide.md) to understand Thing IDs and queries
+3. **Understand Async** - Study [Async Database Patterns](../../junior-dev-helper/async-database-patterns.md) - especially Arc/RwLock patterns
+4. **Master Connection Pooling** - Read [Connection Pool Guide](../../junior-dev-helper/connection-pool-guide.md) to understand resource management
+5. **Learn Retry Logic** - Understand [Retry Patterns Guide](../../junior-dev-helper/retry-patterns-guide.md) with exponential backoff
+6. **Practice TDD** - Follow [Database TDD Examples](../../junior-dev-helper/database-tdd-examples.md) to write tests first
+7. **Integration Testing** - Use [TestContainers Guide](../../junior-dev-helper/testcontainers-guide.md) for real database tests
+8. **Debug Issues** - Keep [Common Database Errors](../../junior-dev-helper/database-common-errors.md) handy
+
+Remember: The database layer is the foundation. Take time to understand connection management and error handling!
 
 ## Next Phase Preview
 

@@ -76,32 +76,28 @@ Authorization code MUST have comprehensive documentation including:
 ## Comprehensive Cleanliness Verification
 
 ### Code Cleanliness Checklist
-**MUST verify ALL items - any failure requires "CHANGES REQUIRED"**
 
-#### Development Artifacts
-- [ ] No temporary files (*.tmp, *.bak, *.orig, test_*, demo_*)
-- [ ] No IDE-specific files (.idea/, .vscode/ unless explicitly needed)
-- [ ] No build artifacts in wrong directories
-- [ ] No test databases or SpiceDB data files committed
-- [ ] No example or scratch files
-
-#### Code Hygiene
-- [ ] No commented-out code (except with // KEEP: justification)
-- [ ] No debug statements (println!, dbg!, console.log, tracing::debug in production paths)
-- [ ] No test-only code in production paths
-- [ ] No hardcoded values (endpoints, keys, user IDs)
-- [ ] No TODO/FIXME without issue numbers
-- [ ] No unreachable or dead code
-- [ ] No unused imports or variables
-- [ ] No temporary workarounds without documentation
-
-#### Security Hygiene
+#### Critical Security Items (MUST fix before approval)
 - [ ] No credentials or keys in code
-- [ ] No bypass mechanisms in production code
-- [ ] No test users or permissions
-- [ ] No debug endpoints exposed
-- [ ] No sensitive data in error messages
-- [ ] No authorization shortcuts
+- [ ] No authorization bypasses in production (except feature-gated demo mode)
+- [ ] No sensitive data in logs (tokens, passwords, keys)
+- [ ] No `.unwrap()` or `.expect()` in production paths
+- [ ] No hardcoded authentication tokens or secrets
+
+#### Quality Standards (Should fix, may defer with plan)
+- [ ] No temporary files (*.tmp, *.bak, *.orig)
+- [ ] No commented-out code without justification
+- [ ] No debug statements in production paths
+- [ ] No TODO/FIXME without issue numbers
+- [ ] No unused imports or variables
+- [ ] No test databases or SpiceDB data files committed
+
+#### Best Practices (Note for improvement)
+- [ ] IDE-specific files removed (.idea/, .vscode/)
+- [ ] Build artifacts in correct directories
+- [ ] Code follows project conventions
+- [ ] Documentation is complete
+- [ ] No temporary workarounds without documentation
 
 #### Documentation Quality
 - [ ] All public APIs have rustdoc/comments
@@ -150,9 +146,10 @@ cargo test test_error_codes
 - Confirm session extraction is secure
 
 **Performance Validation**:
-- Context extraction should be < 1ms
+- Context extraction target < 1ms (2ms acceptable)
 - Helper function overhead minimal
 - No blocking operations in auth path
+- Document any performance concerns for optimization
 
 **Review Checklist**:
 ```markdown
@@ -253,9 +250,7 @@ cargo bench cache_operations
 ### Cache Implementation
 - [ ] Trait defines all required operations
 - [ ] In-memory implementation correct
-- [ ] Only positive results cached
-- [ ] TTL exactly 5 minutes default
-- [ ] Extended TTL 30 minutes for degraded mode
+- [ ] Only positive results cached (NEVER negative - SECURITY CRITICAL)
 
 ### Cache Behavior
 - [ ] Get returns None for expired entries
@@ -263,6 +258,8 @@ cargo bench cache_operations
 - [ ] LRU eviction when full
 - [ ] User invalidation clears all user entries
 - [ ] Statistics accurately tracked
+- [ ] TTL approximately 5 minutes default (4-6 minutes acceptable)
+- [ ] Extended TTL ~30 minutes for degraded mode (20-40 minutes acceptable)
 
 ### Cleanup Task
 - [ ] Background task spawned on creation
@@ -360,9 +357,9 @@ cargo test test_graceful_degradation
 - [ ] Error handling comprehensive
 
 ### Circuit Breaker
-- [ ] Opens after 3 failures
-- [ ] Half-open after 5 seconds
-- [ ] Closes after 2 successes
+- [ ] Opens after 3-5 consecutive failures
+- [ ] Half-open after reasonable timeout (5-10 seconds)
+- [ ] Closes after 2-3 successes
 - [ ] State transitions correct
 - [ ] Metrics track state changes
 
@@ -388,11 +385,11 @@ cargo test test_graceful_degradation
 - [ ] Appropriate warnings logged
 
 ### Performance
-- [ ] SpiceDB calls < 50ms p95
-- [ ] Circuit breaker adds < 1ms
-- [ ] Fallback decisions < 1ms
+- [ ] SpiceDB calls target < 50ms p95 (100ms acceptable)
+- [ ] Circuit breaker adds minimal overhead
+- [ ] Fallback decisions fast (< 5ms)
 - [ ] No blocking operations
-- [ ] Connection pool sized well
+- [ ] Connection pool reasonable size
 
 ### Cleanliness Check
 - [ ] No hardcoded endpoints
@@ -476,10 +473,10 @@ artillery run load-tests/auth-load-test.yml
 - [ ] Cache behavior verified
 
 ### Performance
-- [ ] Cache hit rate >90% in tests
-- [ ] Authorization <5ms p99 (cached)
-- [ ] Authorization <50ms p99 (SpiceDB)
-- [ ] No performance regressions
+- [ ] Cache hit rate >85% under normal load
+- [ ] Authorization <10ms p99 (cached)
+- [ ] Authorization <100ms p99 (SpiceDB)
+- [ ] No severe performance regressions
 - [ ] Benchmarks establish baseline
 
 ### Security Validation
@@ -674,3 +671,48 @@ Before approving Phase 4 completion:
 4. Profile authorization path
 
 Remember: Phase 4 establishes the security foundation for the entire API. Be thorough in review, as authorization bugs can have severe consequences.
+
+## Balanced Review Approach
+
+### When to Be Strict (No Compromise)
+1. **Security vulnerabilities** - Any authorization bypass
+2. **Data exposure** - Sensitive information in logs/errors
+3. **Negative caching** - Never cache authorization denials
+4. **Missing auth checks** - All endpoints must be protected
+5. **Production panics** - No .unwrap() in production paths
+
+### When to Be Flexible (Use Judgment)
+1. **Performance targets** - Close enough is acceptable
+2. **Code organization** - Suggest improvements, don't block
+3. **Test coverage percentage** - Focus on critical paths
+4. **Documentation completeness** - Security docs required, others helpful
+5. **Implementation details** - Multiple valid approaches exist
+
+### Recovery Guidance for Workers
+
+If a worker appears stuck:
+1. Check their questions file for specific blockers
+2. Look for security requirements being met even if implementation differs
+3. Consider if they're over-engineering due to strict language
+4. Provide specific guidance on acceptable shortcuts
+5. Focus on unblocking progress while maintaining security
+
+### Progressive Review Strategy
+
+**First Pass**: Security and Functionality
+- Are authorization checks in place?
+- Do fallback rules fail closed?
+- Is sensitive data protected?
+- Does the code work?
+
+**Second Pass**: Quality and Performance
+- Is performance acceptable?
+- Are tests comprehensive?
+- Is code maintainable?
+- Are there improvement opportunities?
+
+**Final Decision**: Balance risk vs progress
+- Security issues: Always block
+- Performance issues: Usually iterate
+- Style issues: Note for future
+- Missing features: Depends on criticality

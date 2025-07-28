@@ -9,6 +9,23 @@ Before starting Phase 4, ensure you have:
 - **Security Best Practices**: Understanding of authentication flows, JWT tokens, and OWASP guidelines
 - **Circuit Breaker Pattern**: Familiarity with resilience patterns for external service dependencies
 
+### Learning Resources for Prerequisites
+
+#### SpiceDB/Zanzibar Basics
+- [Google Zanzibar Paper](https://research.google/pubs/pub48190/) - Original concept (30 min read)
+- [SpiceDB Intro Video](https://www.youtube.com/watch?v=x3-B9-ICj0w) - Quick overview (15 min)
+- [SpiceDB Playground](https://play.authzed.com/) - Interactive tutorial (45 min)
+
+#### Circuit Breaker Pattern
+- [Martin Fowler's Circuit Breaker](https://martinfowler.com/bliki/CircuitBreaker.html) - Concept explanation (10 min)
+- [Rust Circuit Breaker Example](https://github.com/luk4z7/rust-circuit-breaker) - Simple implementation (20 min)
+
+#### Distributed Caching
+- [Caching Strategies Overview](https://aws.amazon.com/caching/best-practices/) - When and what to cache (15 min)
+- [Cache-Aside Pattern](https://docs.microsoft.com/en-us/azure/architecture/patterns/cache-aside) - Our approach (10 min)
+
+**Estimated Learning Time**: 2-3 hours for all prerequisites
+
 ## Quick Reference - Essential Resources
 
 ### Example Files
@@ -24,10 +41,21 @@ Key specifications in `/api/.claude/.spec/`:
 - **[ROADMAP.md](../../ROADMAP.md)** - Phase 4 objectives (lines 96-123)
 - **[error-handling.md](../../.spec/error-handling.md)** - 401 vs 403 error distinctions
 
+### Junior Developer Resources
+Comprehensive guides in `/api/.claude/junior-dev-helper/`:
+- **[Authorization Tutorial](../../junior-dev-helper/authorization-tutorial.md)** - Core concepts and implementation patterns
+- **[Common Authorization Errors](../../junior-dev-helper/authorization-common-errors.md)** - Troubleshooting guide
+- **[Circuit Breaker Guide](../../junior-dev-helper/circuit-breaker-guide.md)** - Resilience patterns explained
+- **[Cache Strategies Guide](../../junior-dev-helper/cache-strategies-guide.md)** - Positive-only caching patterns
+- **[SpiceDB Setup Guide](../../junior-dev-helper/spicedb-setup-guide.md)** - Getting started with SpiceDB
+- **[Authorization TDD Examples](../../junior-dev-helper/authorization-tdd-examples.md)** - Test-driven development patterns
+- **[Interactive Tutorial](../../junior-dev-helper/interactive-examples/authorization-playground.rs)** - Hands-on learning
+
 ### Quick Links
 - **Verification Script**: `scripts/verify-phase-4.sh`
 - **Auth Test Suite**: `scripts/test-auth.sh`
 - **SpiceDB Setup**: `scripts/setup-spicedb.sh`
+- **Interactive Playground**: `cargo run --example authorization-playground --features demo`
 
 ## Overview
 This work plan implements secure authorization with SpiceDB integration, focusing on resilience through caching, circuit breakers, and graceful degradation. The system must never fail due to authorization service unavailability. The implementation follows TDD practices with clear checkpoint boundaries.
@@ -54,16 +82,30 @@ Always use these commands instead of direct cargo commands to ensure consistency
 5. **Document as you go** - Add rustdoc comments and inline explanations
 
 ## Done Criteria Checklist
+
+### Non-Negotiable Security Requirements
 - [ ] All endpoints require authorization (except health checks)
 - [ ] SpiceDB permission checks working correctly
-- [ ] Authorization caching reduces load (5 min TTL, positive results only)
+- [ ] Authorization caching stores positive results only (NEVER negative)
 - [ ] Proper 401 (unauthenticated) vs 403 (unauthorized) responses
-- [ ] Demo mode bypass functional for testing
 - [ ] Circuit breaker prevents cascade failures
-- [ ] Fallback rules work during SpiceDB outage
+- [ ] Conservative fallback rules during SpiceDB outage
 - [ ] Audit logging for all authorization decisions
-- [ ] Metrics track authorization performance
 - [ ] No `.unwrap()` or `.expect()` in production code paths
+- [ ] No authorization bypasses except feature-gated demo mode
+
+### Target-Based Performance Goals
+- [ ] Cache TTL approximately 5 minutes (4-6 minutes acceptable)
+- [ ] Authorization latency <50ms p95 with SpiceDB available
+- [ ] Circuit breaker opens after 3-5 consecutive failures
+- [ ] Cache hit rate >85% under normal load
+- [ ] Metrics track authorization performance
+
+### Implementation Guidance
+- [ ] Demo mode bypass functional for testing
+- [ ] Code follows project patterns and conventions
+- [ ] Tests achieve >90% coverage on critical paths
+- [ ] Documentation explains security decisions
 
 ## Work Breakdown with Review Checkpoints
 
@@ -71,7 +113,9 @@ Always use these commands instead of direct cargo commands to ensure consistency
 
 **Work Unit Context:**
 - **Complexity**: Medium - Core authorization abstraction and session handling
-- **Scope**: Target 600-800 lines across 5-6 files (MUST document justification if outside range)
+- **Scope**: Target 600-800 lines across 5-6 files
+  - If exceeding 1000 lines, document the security/complexity justification
+  - If under 400 lines, ensure all security requirements are met
 - **Key Components**: 
   - Standard is_authorized helper function (~200 lines)
   - Authentication context extraction (~150 lines)
@@ -82,6 +126,9 @@ Always use these commands instead of direct cargo commands to ensure consistency
 - **Patterns**: Context propagation, error mapping, async authorization, audit trail
 
 #### Task 4.1.1: Write Authorization Helper Tests First
+
+💡 **Junior Developer Tip**: Not sure about TDD for authorization? Check out [Authorization TDD Examples](../../junior-dev-helper/authorization-tdd-examples.md) for step-by-step patterns!
+
 Create `src/helpers/authorization.rs` with comprehensive test module. MUST write and run tests first to see them fail before implementing:
 ```rust
 #[cfg(test)]
@@ -251,6 +298,7 @@ pub async fn is_authorized(
         return if allowed {
             Ok(())
         } else {
+            // SECURITY: Never cache negative results
             Err(Error::new("Permission denied")
                 .extend_with(|_, ext| ext.set("code", "FORBIDDEN")))
         };
@@ -259,9 +307,11 @@ pub async fn is_authorized(
     // Check with SpiceDB (implementation in checkpoint 3)
     let allowed = check_permission_with_fallback(ctx, user_id, resource, action).await?;
     
-    // Cache positive results
+    // Cache positive results only - SECURITY CRITICAL
+    // 💡 Junior Dev: See [Cache Strategies Guide](../../junior-dev-helper/cache-strategies-guide.md) for why we NEVER cache denials!
     if allowed {
-        let ttl = Duration::from_secs(300); // 5 minutes
+        // TTL can be adjusted between 4-6 minutes based on load testing
+        let ttl = Duration::from_secs(300); // 5 minutes default
         cache.set(cache_key, allowed, ttl).await;
     }
     
@@ -282,7 +332,7 @@ pub async fn is_authorized(
     }
 }
 
-// Stub for checkpoint 3
+// Stub for checkpoint 3 - SECURITY: Must fail closed
 async fn check_permission_with_fallback(
     ctx: &Context<'_>,
     user_id: &str,
@@ -290,6 +340,7 @@ async fn check_permission_with_fallback(
     action: &str,
 ) -> Result<bool, Error> {
     // Will be implemented in checkpoint 3
+    // SECURITY: Default deny until properly implemented
     Ok(false)
 }
 ```
@@ -700,7 +751,7 @@ impl AuthCache {
 1. ✅ Complete all tasks in section 4.2
 2. 📝 Self-verify your work:
    - [ ] All cache tests written first and passing
-   - [ ] TTL expiration works correctly
+   - [ ] TTL expiration works correctly (4-6 minutes acceptable)
    - [ ] LRU eviction when at capacity
    - [ ] Background cleanup task running
    - [ ] Thread-safe concurrent access
@@ -719,6 +770,11 @@ impl AuthCache {
    - Write to: `api/.claude/.reviews/checkpoint-2-questions.md`
 6. 🛑 **STOP AND WAIT** for review approval
 
+**Recovery Note**: If struggling with cache implementation complexity, focus on:
+- Security requirement: Only cache positive results
+- Basic TTL functionality (exact timing less critical)
+- Document alternative approaches in questions file
+
 **DO NOT PROCEED TO SECTION 4.3**
 
 ---
@@ -727,7 +783,9 @@ impl AuthCache {
 
 **Work Unit Context:**
 - **Complexity**: High - External service integration with resilience patterns
-- **Scope**: Target 800-1000 lines across 5-6 files (MUST document justification if outside range)
+- **Scope**: Target 800-1000 lines across 5-6 files
+  - If exceeding 1200 lines due to resilience complexity, document reasoning
+  - Focus on security and reliability over line count
 - **Key Components**:
   - SpiceDB client wrapper (~200 lines)
   - Circuit breaker implementation (~250 lines)
@@ -807,6 +865,9 @@ mod spicedb_tests {
 ```
 
 #### Task 4.3.2: Implement SpiceDB Client
+
+💡 **Junior Developer Tip**: New to SpiceDB? Start with [SpiceDB Setup Guide](../../junior-dev-helper/spicedb-setup-guide.md) to understand the concepts first!
+
 Create the SpiceDB client wrapper:
 ```rust
 // src/services/spicedb/mod.rs
@@ -909,6 +970,9 @@ pub struct CheckPermissionRequest {
 ```
 
 #### Task 4.3.3: Implement Circuit Breaker
+
+💡 **Junior Developer Tip**: Circuit breakers can be confusing! Read [Circuit Breaker Guide](../../junior-dev-helper/circuit-breaker-guide.md) for visual explanations and common patterns.
+
 Create the circuit breaker for resilience:
 ```rust
 // src/middleware/circuit_breaker.rs
@@ -1063,6 +1127,9 @@ impl CircuitBreaker {
 ```
 
 #### Task 4.3.4: Implement Fallback Authorization
+
+⚠️ **Important**: Fallback rules must be conservative! See [Authorization Tutorial](../../junior-dev-helper/authorization-tutorial.md#fallback-rules) for why we deny by default.
+
 Create fallback rules for when SpiceDB is unavailable:
 ```rust
 // src/auth/fallback.rs
@@ -1075,6 +1142,7 @@ impl FallbackAuthorizer {
     
     /// Conservative fallback rules when SpiceDB is unavailable
     /// 
+    /// SECURITY CRITICAL - These rules must be conservative:
     /// Allowed:
     /// - Health checks (no resource)
     /// - Users reading their own resources
@@ -1585,17 +1653,17 @@ criterion_main!(benches);
 **WORKER CHECKPOINT ACTIONS:**
 1. ✅ Complete all tasks in section 4.4
 2. 📝 Self-verify your work:
-   - [ ] All GraphQL resolvers use authorization
-   - [ ] Integration tests cover all scenarios
-   - [ ] Demo mode works as expected
-   - [ ] Performance benchmarks acceptable
+   - [ ] All GraphQL resolvers use authorization (NO EXCEPTIONS)
+   - [ ] Integration tests cover critical security scenarios
+   - [ ] Demo mode works and is feature-gated
+   - [ ] Performance meets targets (<50ms p95 with SpiceDB)
    - [ ] Verification script passes
-   - [ ] No authorization bypasses
+   - [ ] No authorization bypasses (SECURITY CRITICAL)
 3. 🧹 Final cleanup:
    - [ ] Remove all test data
    - [ ] No debug configurations
-   - [ ] Documentation updated
-   - [ ] All features tested
+   - [ ] Documentation explains security decisions
+   - [ ] Core features tested thoroughly
    - [ ] Production ready
 4. 💾 Commit your work:
    ```bash
@@ -1606,6 +1674,11 @@ criterion_main!(benches);
    - Write to: `api/.claude/.reviews/checkpoint-4-questions.md`
 6. 🛑 **STOP AND WAIT** for final review
 
+**Recovery Note**: If integration is complex:
+- Focus on security requirements first
+- Document any performance issues found
+- Propose optimizations in questions file
+
 **Phase 4 Complete!**
 
 ---
@@ -1613,12 +1686,59 @@ criterion_main!(benches);
 ## Summary
 
 Phase 4 implements a robust authorization system with:
-- Standard `is_authorized` helper used everywhere
-- Positive-only caching with 5-minute TTL
-- SpiceDB integration with circuit breaker
-- Conservative fallback rules during outages
-- Comprehensive audit logging
-- Demo mode for development
-- Full test coverage and benchmarks
+- Standard `is_authorized` helper used everywhere (MANDATORY)
+- Positive-only caching with ~5-minute TTL (4-6 minutes acceptable)
+- SpiceDB integration with circuit breaker (3-5 failure threshold)
+- Conservative fallback rules during outages (SECURITY CRITICAL)
+- Comprehensive audit logging (all decisions logged)
+- Demo mode for development (feature-gated only)
+- Strong test coverage on security paths
 
 The system ensures the API never fails due to authorization service unavailability while maintaining security through conservative fallback rules.
+
+## Junior Developer Learning Path
+
+For junior developers new to authorization systems, here's a recommended learning path:
+
+1. **Start with Concepts** - Read [Authorization Tutorial](../../junior-dev-helper/authorization-tutorial.md) to understand authentication vs authorization
+2. **Learn SpiceDB Basics** - Follow [SpiceDB Setup Guide](../../junior-dev-helper/spicedb-setup-guide.md) and try the playground
+3. **Understand Caching** - Study [Cache Strategies Guide](../../junior-dev-helper/cache-strategies-guide.md) - especially why we only cache positive results
+4. **Master Circuit Breakers** - Work through [Circuit Breaker Guide](../../junior-dev-helper/circuit-breaker-guide.md) with visual examples
+5. **Practice TDD** - Use [Authorization TDD Examples](../../junior-dev-helper/authorization-tdd-examples.md) to write tests first
+6. **Debug Common Issues** - Keep [Common Authorization Errors](../../junior-dev-helper/authorization-common-errors.md) handy for troubleshooting
+7. **Try Interactive Examples** - Run `cargo run --example authorization-playground --features demo` to see it all in action
+
+Remember: Authorization is security-critical. When in doubt, deny access!
+
+---
+
+## Flexibility Guidelines
+
+### When It's OK to Exceed Scope
+1. **Security Enhancement**: Adding extra validation or safety checks
+   - Example: Additional input sanitization beyond requirements
+   - Example: Extra audit logging for sensitive operations
+
+2. **Error Handling**: Comprehensive error messages for better debugging
+   - Example: Detailed error context for authorization failures
+   - Example: Additional error recovery paths
+
+3. **Performance Optimization**: Proactive improvements
+   - Example: Adding indexes for common query patterns
+   - Example: Implementing connection pooling beyond basic requirements
+
+### When to Document Scope Changes
+Always document in checkpoint questions when:
+- Line count exceeds target by >20%
+- Adding features not in original plan
+- Implementing alternative approaches
+- Discovering additional security requirements
+
+### Example Justification
+```
+// In api/.claude/.reviews/checkpoint-2-questions.md
+Q: Cache implementation exceeded 1000 lines (currently 1200)
+Justification: Added comprehensive error recovery and retry logic 
+to handle edge cases discovered during testing. The additional 
+code improves resilience when SpiceDB has intermittent issues.
+```

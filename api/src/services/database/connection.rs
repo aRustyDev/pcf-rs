@@ -51,7 +51,7 @@ impl Default for ExponentialBackoff {
 }
 
 /// Connection pool configuration
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PoolConfig {
     pub min_connections: usize,
     pub max_connections: usize,
@@ -531,9 +531,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_retry_startup_vs_operation_timeout() {
-        // Test startup timeout (should be longer)
+        // Test startup timeout (should be longer) - use shorter times for testing
         unsafe {
-            std::env::set_var("STARTUP_MAX_WAIT", "2");
+            std::env::set_var("STARTUP_MAX_WAIT", "3");
             std::env::set_var("DB_OPERATION_TIMEOUT", "1");
         }
         
@@ -550,10 +550,10 @@ mod tests {
         ).await;
         
         assert!(result.is_err());
-        // Should use startup timeout (2s), not operation timeout (1s)
+        // Should use startup timeout (3s), not operation timeout (1s)
         // Allow some tolerance for timing and exponential backoff delays
-        assert!(start_time.elapsed() >= Duration::from_secs(2));
-        assert!(start_time.elapsed() < Duration::from_secs(8)); // More tolerance for backoff timing
+        assert!(start_time.elapsed() >= Duration::from_secs(3));
+        assert!(start_time.elapsed() < Duration::from_secs(6)); // Tighter tolerance
         
         // Clean up
         unsafe {

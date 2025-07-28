@@ -1,0 +1,221 @@
+/* PCF API Documentation Custom Styles */
+
+/* Brand Colors */
+:root {
+    --pcf-primary: #2e7d32;
+    --pcf-primary-dark: #1b5e20;
+    --pcf-accent: #00acc1;
+    --pcf-warning: #ff9800;
+    --pcf-error: #d32f2f;
+    --pcf-success: #388e3c;
+}
+
+/* Custom Typography */
+.content h1 {
+    border-bottom: 2px solid var(--pcf-primary);
+    padding-bottom: 0.5rem;
+}
+
+/* Code Blocks Enhancement */
+pre {
+    position: relative;
+}
+
+pre code {
+    font-size: 0.9em;
+}
+
+/* Copy Button for Code Blocks */
+.copy-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    padding: 5px 10px;
+    font-size: 0.8em;
+    background: var(--bg);
+    border: 1px solid var(--searchbar-border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+pre:hover .copy-button {
+    opacity: 1;
+}
+
+/* Interactive Diagram Placeholders */
+.interactive-diagram {
+    position: relative;
+    border: 2px dashed var(--pcf-accent);
+    padding: 1rem;
+    margin: 1rem 0;
+    background: var(--quote-bg);
+}
+
+.interactive-diagram::before {
+    content: "🔮 Interactive Feature (Coming Soon)";
+    position: absolute;
+    top: -12px;
+    left: 10px;
+    background: var(--bg);
+    padding: 0 10px;
+    font-size: 0.8em;
+    color: var(--pcf-accent);
+}
+
+/* Navigation Improvements */
+.chapter li.chapter-item {
+    margin: 0.25rem 0;
+}
+
+.chapter li.part-title {
+    font-weight: bold;
+    color: var(--pcf-primary);
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Responsive Tables */
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    min-width: 100%;
+    border-collapse: collapse;
+}
+
+table th {
+    background: var(--table-header-bg);
+    font-weight: bold;
+    text-align: left;
+    padding: 0.5rem;
+}
+
+table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--table-border-color);
+}
+
+/* Admonition Blocks (fallback if plugin not available) */
+.admonition {
+    padding: 1rem;
+    margin: 1rem 0;
+    border-left: 4px solid;
+    background: var(--quote-bg);
+}
+
+.admonition.note {
+    border-color: var(--pcf-accent);
+}
+
+.admonition.warning {
+    border-color: var(--pcf-warning);
+}
+
+.admonition.danger {
+    border-color: var(--pcf-error);
+}
+
+.admonition.success {
+    border-color: var(--pcf-success);
+}
+
+/* Performance Chart Placeholder */
+.perf-chart {
+    border: 1px solid var(--table-border-color);
+    padding: 2rem;
+    text-align: center;
+    background: var(--quote-bg);
+    margin: 1rem 0;
+}
+
+/* GraphQL Playground Mock */
+.playground-mock {
+    border: 1px solid var(--table-border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.playground-header {
+    background: var(--table-header-bg);
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.endpoint-url {
+    flex: 1;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--searchbar-border-color);
+    background: var(--bg);
+    border-radius: 3px;
+}
+
+.play-button {
+    padding: 0.25rem 1rem;
+    background: var(--pcf-primary);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.playground-body {
+    display: flex;
+    height: 400px;
+}
+
+.query-editor, .response-viewer {
+    flex: 1;
+    padding: 1rem;
+    overflow: auto;
+}
+
+.query-editor {
+    border-right: 1px solid var(--table-border-color);
+}
+
+/* Print Styles */
+@media print {
+    .nav-wrapper,
+    .theme-popup,
+    .buttons,
+    #menu-bar {
+        display: none;
+    }
+    
+    .content {
+        max-width: 100%;
+    }
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .playground-body {
+        flex-direction: column;
+        height: auto;
+    }
+    
+    .query-editor {
+        border-right: none;
+        border-bottom: 1px solid var(--table-border-color);
+    }
+    
+    table {
+        font-size: 0.9em;
+    }
+}
+
+/* Dark Theme Adjustments */
+.rust {
+    --pcf-primary: #4caf50;
+    --pcf-primary-dark: #2e7d32;
+}
+
+.navy {
+    --pcf-primary: #4caf50;
+    --pcf-primary-dark: #2e7d32;
+}

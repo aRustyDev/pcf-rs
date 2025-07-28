@@ -1,8 +1,25 @@
 # Phase 5 Review Plan - Guidelines for Reviewing Agents
 
+> **Review Philosophy**: This plan emphasizes thorough verification while recognizing real-world constraints. Use the three-tier approval system (APPROVED, CONDITIONAL APPROVAL, CHANGES REQUIRED) to balance quality with progress. Focus on security and cardinality as non-negotiable, while allowing flexibility in performance targets with proper justification.
+
 ## Overview
 
 This document provides comprehensive guidance for agents conducting reviews at Phase 5 checkpoints. As a reviewing agent, you are responsible for ensuring the observability implementation meets all specifications, maintains security standards, and minimizes performance impact.
+
+## Junior Developer Review Resources
+
+If you're new to reviewing observability implementations, these guides will help you understand the concepts and best practices:
+
+📚 **Essential Reading Before Review**:
+- **[Observability Tutorial](../../junior-dev-helper/observability-tutorial.md)** - Understand metrics, logs, and traces
+- **[Cardinality Control Guide](../../junior-dev-helper/cardinality-control-guide.md)** - Critical for reviewing metric implementations
+- **[Common Observability Errors](../../junior-dev-helper/observability-common-errors.md)** - Know what to look for
+
+📚 **Reference During Review**:
+- **[Prometheus Metrics Guide](../../junior-dev-helper/prometheus-metrics-guide.md)** - For metrics checkpoint
+- **[Structured Logging Guide](../../junior-dev-helper/structured-logging-guide.md)** - For logging checkpoint
+- **[OpenTelemetry Tracing Guide](../../junior-dev-helper/opentelemetry-tracing-guide.md)** - For tracing checkpoint
+- **[Observability TDD Examples](../../junior-dev-helper/observability-tdd-examples.md)** - To verify TDD practices
 
 ## Your Responsibilities as Reviewer
 
@@ -74,6 +91,42 @@ For each checkpoint review:
 
 5. **Provide clear decision**: APPROVED or CHANGES REQUIRED
 
+## Prerequisites Check
+
+Before starting any review, ensure you have the necessary tools available:
+
+### Required Tools
+```bash
+# Check if promtool is available
+if ! command -v promtool &> /dev/null; then
+    echo "promtool not found. Install with:"
+    echo "  - Mac: brew install prometheus"
+    echo "  - Linux: Download from https://prometheus.io/download/"
+    echo "  - Docker: docker run --rm -v \$(pwd):/tmp prom/prometheus promtool check metrics /tmp/metrics"
+fi
+
+# Check if grpcurl is available
+if ! command -v grpcurl &> /dev/null; then
+    echo "grpcurl not found. Install with:"
+    echo "  - Mac: brew install grpcurl"
+    echo "  - Linux: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest"
+    echo "  - Alternative: Use curl for HTTP/JSON endpoints"
+fi
+
+# Check if jq is available for JSON parsing
+if ! command -v jq &> /dev/null; then
+    echo "jq not found. Install with:"
+    echo "  - Mac: brew install jq"
+    echo "  - Linux: apt-get install jq or yum install jq"
+fi
+```
+
+### Alternative Verification Methods
+If tools are not available, use these manual verification approaches:
+- **For promtool**: Manually verify Prometheus format (see Manual Prometheus Format Check below)
+- **For grpcurl**: Use HTTP endpoints or check logs for OTLP connection success
+- **For jq**: Use grep and sed for JSON parsing or visual inspection
+
 ## Checkpoint-Specific Review Guidelines
 
 ### 🛑 CHECKPOINT 1: Metrics Implementation Review
@@ -88,9 +141,20 @@ For each checkpoint review:
 - Performance sampling works
 
 **Required Tests**:
+
+📚 **New to metrics?** See the [Prometheus Metrics Guide](../../junior-dev-helper/prometheus-metrics-guide.md) for understanding metric types and formats.
+
 ```bash
 # Test metrics endpoint
 curl http://localhost:8080/metrics | promtool check metrics
+
+# If promtool not available, use manual check:
+# curl http://localhost:8080/metrics > metrics.txt
+# Then verify manually:
+# - Each metric line has format: metric_name{label="value"} number
+# - Comments start with #
+# - No empty label values
+# - Valid metric names (letters, digits, underscores only)
 
 # Verify cardinality limiting
 # Make requests with 100 different operation names
@@ -107,6 +171,25 @@ curl http://localhost:8080/metrics | grep graphql_request_total | wc -l
 curl http://localhost:8080/metrics | grep -E "graphql_request_total|graphql_request_duration_seconds"
 ```
 
+**Manual Prometheus Format Check** (if promtool unavailable):
+```bash
+# Valid Prometheus format example:
+# # HELP graphql_request_total Total GraphQL requests
+# # TYPE graphql_request_total counter
+# graphql_request_total{operation_type="query",operation_name="getUser",status="success"} 42
+
+# Check for common format errors:
+curl http://localhost:8080/metrics | while read line; do
+  # Skip comments and empty lines
+  [[ "$line" =~ ^#.*$ ]] || [[ -z "$line" ]] && continue
+  
+  # Check basic format: metric_name{labels} value
+  if ! [[ "$line" =~ ^[a-zA-Z_:][a-zA-Z0-9_:]*(\{[^}]*\})?\s+[0-9.+-eE]+$ ]]; then
+    echo "Invalid format: $line"
+  fi
+done
+```
+
 **Cardinality Verification**:
 ```bash
 # Calculate total cardinality
@@ -114,7 +197,8 @@ curl http://localhost:8080/metrics | grep -E "^[^#]" | wc -l
 
 # Check specific metric cardinality
 curl http://localhost:8080/metrics | grep graphql_request_total | sort | uniq | wc -l
-# Should not exceed: 3 types × 50 operations × 2 statuses = 300
+# Target maximum: 3 types × 50 operations × 2 statuses = 300
+# Investigate if significantly higher
 
 # Verify bucketing works
 # Make requests with various status codes
@@ -142,23 +226,22 @@ done
 - [ ] Warning logs for exceeded limits: [YES/NO]
 
 ### Required Metrics
-GraphQL Metrics:
+
+Core Metrics (MUST have):
 - [ ] graphql_request_total: [YES/NO]
 - [ ] graphql_request_duration_seconds: [YES/NO]
 - [ ] graphql_errors_total: [YES/NO]
-- [ ] graphql_active_subscriptions: [YES/NO]
-- [ ] graphql_field_resolution_duration_seconds: [YES/NO]
-
-HTTP Metrics:
 - [ ] http_request_total: [YES/NO]
 - [ ] http_request_duration_seconds: [YES/NO]
 
-Database Metrics:
+Extended Metrics (SHOULD have if applicable):
+- [ ] graphql_active_subscriptions: [YES/NO] - Only if using subscriptions
+- [ ] graphql_field_resolution_duration_seconds: [YES/NO] - For slow field tracking
 - [ ] database_connection_pool_size: [YES/NO]
 - [ ] database_query_total: [YES/NO]
 - [ ] database_query_duration_seconds: [YES/NO]
 
-System Metrics:
+System Metrics (NICE to have):
 - [ ] process_open_fds: [YES/NO]
 - [ ] process_resident_memory_bytes: [YES/NO]
 
@@ -169,7 +252,10 @@ System Metrics:
 - [ ] Metrics endpoint can be restricted: [YES/NO]
 
 ### Performance Impact
-- [ ] Metric collection overhead: __% (target < 1%)
+- [ ] Metric collection overhead: __% 
+  - Target: < 1%
+  - Acceptable: < 2% with justification
+  - Review cardinality if > 2%
 - [ ] Memory usage stable: [YES/NO]
 - [ ] No blocking operations: [YES/NO]
 - [ ] Sampling implemented for expensive metrics: [YES/NO]
@@ -189,6 +275,8 @@ System Metrics:
 ### 🛑 CHECKPOINT 2: Logging Implementation Review
 
 **What You're Reviewing**: Structured logging with sanitization
+
+📚 **New to structured logging?** Review the [Structured Logging Guide](../../junior-dev-helper/structured-logging-guide.md) to understand sanitization patterns.
 
 **Key Specifications to Verify**:
 - JSON format in production
@@ -295,6 +383,8 @@ tail -n 100 logs.json | jq . | grep -E "password|email|token|key"
 
 **What You're Reviewing**: OpenTelemetry distributed tracing
 
+📚 **New to distributed tracing?** Start with the [OpenTelemetry Tracing Guide](../../junior-dev-helper/opentelemetry-tracing-guide.md) to understand spans and context propagation.
+
 **Key Specifications to Verify**:
 - Spans created for all operations
 - Context propagation works
@@ -388,7 +478,10 @@ External Services:
 - [ ] No data loss for sampled traces: [YES/NO]
 
 ### Performance
-- [ ] Tracing overhead: __% (target < 3%)
+- [ ] Tracing overhead: __% 
+  - Target: < 3%
+  - Acceptable: < 5% with sampling adjustments
+  - Unacceptable: > 5% without mitigation
 - [ ] Span creation non-blocking: [YES/NO]
 - [ ] Batch export working: [YES/NO]
 - [ ] Memory usage stable: [YES/NO]
@@ -500,18 +593,25 @@ Logs + Traces:
 - [ ] Context properly attached: [YES/NO]
 
 ### Performance Analysis
-- [ ] Total overhead: __% (target < 5%)
-  - [ ] Metrics: __% 
-  - [ ] Logging: __%
-  - [ ] Tracing: __%
+- [ ] Total overhead: __% 
+  - Target: < 5% combined
+  - Acceptable: < 10% with documented reasons
+  - Breakdown:
+    - [ ] Metrics: __% 
+    - [ ] Logging: __%
+    - [ ] Tracing: __%
 - [ ] Memory usage increase: __MB
 - [ ] CPU usage increase: __%
 - [ ] No goroutine/task leaks: [YES/NO]
 - [ ] Stable under load: [YES/NO]
 
 ### Cardinality Analysis
-- [ ] Total metrics: ___ (target < 10K)
+- [ ] Total metrics: ___ 
+  - Target: < 10K series
+  - Warning: > 20K series
+  - Critical: > 50K series
 - [ ] Largest metric cardinality: ___
+  - Should be < 1000 per metric
 - [ ] Growth rate acceptable: [YES/NO]
 - [ ] Limits enforced: [YES/NO]
 - [ ] Alerts configured: [YES/NO]
@@ -595,19 +695,32 @@ When you find issues during review:
 
 ### APPROVED
 Grant approval when:
-- All Done Criteria met
-- Security requirements satisfied
-- Performance overhead < 5%
-- Cardinality controlled
-- Only LOW severity issues
+- All CRITICAL requirements met
+- No HIGH severity security issues  
+- Performance within acceptable range
+- Cardinality controlled (or justified)
+- MEDIUM issues have mitigation plans
+- LOW issues are documented
+
+### CONDITIONAL APPROVAL
+Grant conditional approval when:
+- All CRITICAL security requirements met
+- One or two HIGH issues with clear fix path
+- Performance slightly over target with optimization plan
+- Requires follow-up but doesn't block progress
+
+Include conditions:
+1. Specific issues to address
+2. Timeline for fixes
+3. Re-review requirements
 
 ### CHANGES REQUIRED
 Require changes when:
-- Sensitive data exposed
-- Cardinality unbounded
-- Major metrics missing
-- Performance overhead > 5%
-- Any CRITICAL or HIGH issues
+- CRITICAL security issues found
+- Cardinality unbounded without justification
+- Performance significantly over limits (>10% without plan)
+- Multiple HIGH issues without mitigation
+- Evidence of skipped TDD process
 
 ## Testing Observability Overhead
 
@@ -683,7 +796,13 @@ Before submitting your review:
 2. [Specific action with priority]
 
 ## Decision
-**[APPROVED / CHANGES REQUIRED]**
+**[APPROVED / CONDITIONAL APPROVAL / CHANGES REQUIRED]**
+
+[If CONDITIONAL APPROVAL]
+The implementing agent may proceed with these conditions:
+1. [Specific issue to address within X days]
+2. [Follow-up action required]
+3. [Documentation to provide]
 
 [If CHANGES REQUIRED]
 The implementing agent must:

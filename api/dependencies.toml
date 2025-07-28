@@ -1,0 +1,263 @@
+# PCF API Dependencies Documentation
+# This file documents the rationale for each dependency in the project
+
+[dependencies.tokio]
+version = "1.35"
+license = "MIT"
+category = "async-runtime"
+rationale = """
+Industry-standard async runtime for Rust. Chosen for:
+- Excellent performance with low overhead
+- Comprehensive async ecosystem support
+- Battle-tested in production environments
+- Required by async-graphql and other async dependencies
+"""
+alternatives_considered = [
+    { name = "async-std", reason_not_chosen = "Smaller ecosystem, less adoption in production" },
+    { name = "smol", reason_not_chosen = "Less mature, limited ecosystem support" }
+]
+migration_cost = "high"
+migration_notes = "Would require rewriting all async code and finding alternative libraries"
+
+[dependencies.axum]
+version = "0.7"
+license = "MIT"
+category = "web-framework"
+rationale = """
+Modern web framework built on Tower. Selected because:
+- Excellent type safety and ergonomics
+- Built on Tower middleware ecosystem
+- First-class async support with Tokio
+- Growing community adoption
+- Lightweight and performant
+"""
+alternatives_considered = [
+    { name = "actix-web", reason_not_chosen = "More complex, less idiomatic Rust patterns" },
+    { name = "warp", reason_not_chosen = "Less middleware support, smaller community" },
+    { name = "rocket", reason_not_chosen = "Requires nightly Rust, less flexible" }
+]
+migration_cost = "medium"
+migration_notes = "Would require rewriting route handlers and middleware"
+
+[dependencies.async-graphql]
+version = "6.0"
+license = "MIT/Apache-2.0"
+category = "graphql"
+rationale = """
+Most mature and feature-complete GraphQL server implementation for Rust:
+- Excellent performance
+- Full GraphQL spec compliance
+- Built-in subscriptions support
+- Great Axum integration
+- Active development and community
+"""
+alternatives_considered = [
+    { name = "juniper", reason_not_chosen = "Less active development, missing features" }
+]
+migration_cost = "high"
+migration_notes = "Would require complete GraphQL layer rewrite"
+
+[dependencies.surrealdb]
+version = "1.5"
+license = "BSL-1.1"
+category = "database"
+rationale = """
+Multi-model database perfect for demo/prototype:
+- In-memory mode for easy demo setup
+- SQL-like query language
+- Built-in real-time subscriptions
+- Schemaless flexibility
+Note: For production, would likely use PostgreSQL
+"""
+alternatives_considered = [
+    { name = "postgresql", reason_not_chosen = "Overkill for demo, requires setup" },
+    { name = "sqlite", reason_not_chosen = "Limited async support, no subscriptions" }
+]
+migration_cost = "medium"
+migration_notes = "Production would use PostgreSQL with proper schema"
+
+[dependencies.tracing]
+version = "0.1"
+license = "MIT"
+category = "observability"
+rationale = """
+De-facto standard for structured logging in Rust:
+- Excellent performance with compile-time filtering
+- Structured context propagation
+- Rich ecosystem of subscribers
+- OpenTelemetry compatibility
+"""
+alternatives_considered = [
+    { name = "log", reason_not_chosen = "Less features, no structured context" },
+    { name = "slog", reason_not_chosen = "Less ecosystem support" }
+]
+migration_cost = "medium"
+migration_notes = "Would require updating all logging statements"
+
+[dependencies.serde]
+version = "1.0"
+license = "MIT/Apache-2.0"
+category = "serialization"
+rationale = """
+The standard serialization framework for Rust:
+- Ubiquitous ecosystem support
+- Zero-cost abstractions
+- Derive macros for ease of use
+- Required by most other dependencies
+"""
+alternatives_considered = []
+migration_cost = "very-high"
+migration_notes = "Fundamental dependency, migration nearly impossible"
+
+[dependencies.figment]
+version = "0.10"
+license = "MIT/Apache-2.0"
+category = "configuration"
+rationale = """
+Powerful configuration library:
+- Multiple source support (files, env, CLI)
+- Type-safe with serde
+- Excellent error messages
+- Profile support for environments
+"""
+alternatives_considered = [
+    { name = "config", reason_not_chosen = "Less features, worse error messages" }
+]
+migration_cost = "low"
+migration_notes = "Configuration is well-isolated in config module"
+
+[dependencies.garde]
+version = "0.15"
+license = "MIT/Apache-2.0"
+category = "validation"
+rationale = """
+Modern validation library:
+- Derive-based API
+- Composable validators
+- Good error messages
+- Integrates well with serde
+"""
+alternatives_considered = [
+    { name = "validator", reason_not_chosen = "Less ergonomic API" }
+]
+migration_cost = "low"
+migration_notes = "Validation is centralized in config module"
+
+[dependencies.tower]
+version = "0.4"
+license = "MIT"
+category = "middleware"
+rationale = """
+The standard service abstraction for Rust:
+- Required by Axum
+- Rich middleware ecosystem
+- Composable service design
+- Battle-tested patterns
+"""
+alternatives_considered = []
+migration_cost = "high"
+migration_notes = "Fundamental to Axum architecture"
+
+[dependencies.uuid]
+version = "1.10"
+license = "MIT/Apache-2.0"
+category = "utilities"
+rationale = """
+Standard UUID implementation:
+- Wide ecosystem support
+- Multiple UUID versions
+- Serde integration
+- Zero dependencies
+"""
+alternatives_considered = []
+migration_cost = "low"
+migration_notes = "Simple type replacement"
+
+[dependencies.chrono]
+version = "0.4"
+license = "MIT/Apache-2.0"
+category = "utilities"
+rationale = """
+De-facto standard for date/time in Rust:
+- Comprehensive timezone support
+- Good performance
+- Serde integration
+- Wide ecosystem adoption
+"""
+alternatives_considered = [
+    { name = "time", reason_not_chosen = "Less feature complete" }
+]
+migration_cost = "medium"
+migration_notes = "Would require updating all timestamp handling"
+
+[dependencies.anyhow]
+version = "1.0"
+license = "MIT/Apache-2.0"
+category = "error-handling"
+rationale = """
+Flexible error handling for applications:
+- Convenient error context
+- Backtrace support
+- Good for application-level errors
+- Pairs well with thiserror
+"""
+alternatives_considered = [
+    { name = "eyre", reason_not_chosen = "Similar but less adopted" }
+]
+migration_cost = "medium"
+migration_notes = "Would need to update error handling patterns"
+
+[dependencies.thiserror]
+version = "2.0"
+license = "MIT/Apache-2.0"
+category = "error-handling"
+rationale = """
+Derive macro for error types:
+- Clean error type definitions
+- Automatic Display implementation
+- Source chain support
+- Zero runtime cost
+"""
+alternatives_considered = []
+migration_cost = "low"
+migration_notes = "Only affects error type definitions"
+
+# Development Dependencies
+
+[dev-dependencies.insta]
+version = "1.41"
+license = "Apache-2.0"
+category = "testing"
+rationale = """
+Snapshot testing for complex outputs:
+- Great for testing serialization
+- Helpful for GraphQL response testing
+- Easy to review changes
+- Good CI integration
+"""
+
+[dev-dependencies.quickcheck]
+version = "1.0"
+license = "MIT/Apache-2.0"
+category = "testing"
+rationale = """
+Property-based testing:
+- Finds edge cases automatically
+- Good for testing validators
+- Complements unit tests
+- Shrinking for minimal failing cases
+"""
+
+[dev-dependencies.testcontainers]
+version = "0.23"
+license = "MIT"
+category = "testing"
+rationale = """
+Integration testing with real services:
+- Test against real databases
+- Automatic cleanup
+- Parallel test support
+- Wide container support
+"""
+
+# TODO: Add more dependencies as they are added to the project

@@ -30,6 +30,16 @@ pub struct AppConfig {
     #[garde(skip)]
     #[serde(default)]
     pub environment: Environment,
+    
+    /// Demo mode configuration (WARNING: Never enable in production!)
+    #[garde(skip)]
+    #[serde(default)]
+    pub demo: super::demo::DemoConfig,
+    
+    /// Authorization system configuration
+    #[garde(dive)]
+    #[serde(default)]
+    pub authorization: AuthorizationConfig,
 }
 
 /// Server configuration for network binding and timeouts
@@ -152,9 +162,106 @@ pub enum Environment {
     Production,
 }
 
+/// Authorization system configuration
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct AuthorizationConfig {
+    /// SpiceDB endpoint URL
+    #[garde(length(min = 1))]
+    #[serde(default = "default_spicedb_endpoint")]
+    pub spicedb_endpoint: String,
+    
+    /// SpiceDB preshared key for authentication
+    #[garde(length(min = 1))]
+    #[serde(default = "default_spicedb_preshared_key")]
+    pub spicedb_preshared_key: String,
+    
+    /// Maximum entries in authorization cache
+    #[garde(range(min = 100, max = 100000))]
+    #[serde(default = "default_cache_max_entries")]
+    pub cache_max_entries: usize,
+    
+    /// Cache TTL in seconds
+    #[garde(range(min = 60, max = 3600))]
+    #[serde(default = "default_cache_ttl_seconds")]
+    pub cache_ttl_seconds: u64,
+    
+    /// Circuit breaker failure threshold
+    #[garde(range(min = 1, max = 20))]
+    #[serde(default = "default_circuit_breaker_failure_threshold")]
+    pub circuit_breaker_failure_threshold: u32,
+    
+    /// Circuit breaker timeout in milliseconds
+    #[garde(range(min = 100, max = 10000))]
+    #[serde(default = "default_circuit_breaker_timeout_ms")]
+    pub circuit_breaker_timeout_ms: u64,
+    
+    /// Circuit breaker retry timeout in seconds
+    #[garde(range(min = 10, max = 300))]
+    #[serde(default = "default_circuit_breaker_retry_timeout_seconds")]
+    pub circuit_breaker_retry_timeout_seconds: u64,
+}
+
+impl Default for AuthorizationConfig {
+    fn default() -> Self {
+        Self {
+            spicedb_endpoint: default_spicedb_endpoint(),
+            spicedb_preshared_key: default_spicedb_preshared_key(),
+            cache_max_entries: default_cache_max_entries(),
+            cache_ttl_seconds: default_cache_ttl_seconds(),
+            circuit_breaker_failure_threshold: default_circuit_breaker_failure_threshold(),
+            circuit_breaker_timeout_ms: default_circuit_breaker_timeout_ms(),
+            circuit_breaker_retry_timeout_seconds: default_circuit_breaker_retry_timeout_seconds(),
+        }
+    }
+}
+
 /// Custom validator for IP addresses (both IPv4 and IPv6)
 fn validate_bind_address(value: &str, _: &()) -> garde::Result {
     value.parse::<std::net::IpAddr>()
         .map(|_| ())
         .map_err(|_| garde::Error::new("Invalid IP address"))
+}
+
+// Authorization configuration defaults
+fn default_spicedb_endpoint() -> String {
+    std::env::var("SPICEDB_ENDPOINT").unwrap_or_else(|_| "http://localhost:50051".to_string())
+}
+
+fn default_spicedb_preshared_key() -> String {
+    std::env::var("SPICEDB_PRESHARED_KEY").unwrap_or_else(|_| "dev_key_12345".to_string())
+}
+
+fn default_cache_max_entries() -> usize {
+    std::env::var("AUTH_CACHE_MAX_ENTRIES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10000)
+}
+
+fn default_cache_ttl_seconds() -> u64 {
+    std::env::var("AUTH_CACHE_TTL_SECONDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(300) // 5 minutes
+}
+
+fn default_circuit_breaker_failure_threshold() -> u32 {
+    std::env::var("AUTH_CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5)
+}
+
+fn default_circuit_breaker_timeout_ms() -> u64 {
+    std::env::var("AUTH_CIRCUIT_BREAKER_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1000) // 1 second
+}
+
+fn default_circuit_breaker_retry_timeout_seconds() -> u64 {
+    std::env::var("AUTH_CIRCUIT_BREAKER_RETRY_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60) // 1 minute
 }

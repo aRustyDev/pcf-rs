@@ -1,0 +1,1537 @@
+# Phase 7: Container & Deployment - Work Plan
+
+## Prerequisites
+
+Before starting Phase 7, ensure you have:
+- **Completed Phases 1-6**: Core API functionality working with any known issues documented in `api/.claude/.reviews/phase-7-prerequisites.md`
+- **Docker Experience**: Understanding of containers, images, and multi-stage builds (or willingness to learn)
+- **Kubernetes Knowledge**: Basic understanding of pods, deployments, services, and secrets (or access to guides)
+- **Security Awareness**: Understanding of container security best practices
+- **Linux Fundamentals**: Familiarity with Linux permissions, users, and processes
+
+**Note**: If you're missing prerequisites, document what you need to learn in `api/.claude/.reviews/phase-7-prerequisites.md` and proceed with available resources.
+
+## Quick Reference - Essential Resources
+
+### Example Files
+All example files are located in `/api/.claude/.spec/examples/`:
+- **[Multi-stage Dockerfile](../../.spec/examples/dockerfile-multistage)** - Optimized Rust container example (to be created - see inline examples below)
+- **[Kubernetes Manifests](../../.spec/examples/k8s-manifests/)** - Production-ready K8s resources (to be created - see inline examples below)
+- **[Security Scanning](../../.spec/examples/security-scan.sh)** - Container vulnerability scanning (to be created - see inline examples below)
+- **[Health Check Integration](../../.spec/health-checks.md)** - Health check requirements for containers
+
+**If example files don't exist**: Use the inline code examples in this document as your primary reference.
+
+### Specification Documents
+Key specifications in `/api/.claude/.spec/`:
+- **[SPEC.md](../../SPEC.md)** - Core requirements including health checks
+- **[ROADMAP.md](../../ROADMAP.md)** - Phase 7 objectives (lines 184-212)
+- **[Health Checks](../../.spec/health-checks.md)** - Container health check requirements
+
+### Junior Developer Resources
+Comprehensive guides in `/api/.claude/junior-dev-helper/`:
+- **[Docker Best Practices](../../junior-dev-helper/docker-best-practices.md)** - Multi-stage builds for Rust
+- **[Kubernetes Deployment Guide](../../junior-dev-helper/kubernetes-deployment-guide.md)** - K8s basics for APIs
+- **[Container Security Guide](../../junior-dev-helper/container-security-guide.md)** - Security scanning and hardening
+- **[Secret Management Tutorial](../../junior-dev-helper/secret-management-tutorial.md)** - Handling secrets safely
+- **[Container Debugging Guide](../../junior-dev-helper/container-debugging-guide.md)** - Troubleshooting containers
+
+**If guides are missing**: Use the inline examples and comments in this document. The code examples include detailed explanations.
+
+### Quick Links
+- **Verification Script**: `scripts/verify-phase-7.sh` (to be created)
+- **Build Script**: `scripts/build-container.sh` (to be created)
+- **Deploy Script**: `scripts/deploy-k8s.sh` (to be created)
+- **Security Scan**: `scripts/scan-container.sh` (to be created)
+
+## Overview
+This work plan implements production-ready containerization with a focus on minimal image size (<50MB), zero security vulnerabilities, and Kubernetes compatibility. Each checkpoint represents a natural boundary for review.
+
+## Build and Test Commands
+
+Continue using `just` as the command runner, with new container commands:
+- `just docker-build` - Build the container image
+- `just docker-run` - Run the container locally
+- `just docker-scan` - Security scan the image
+- `just k8s-deploy` - Deploy to Kubernetes
+- `just k8s-test` - Test Kubernetes deployment
+
+Always use these commands instead of direct docker/kubectl commands to ensure consistency.
+
+## IMPORTANT: Review Process
+
+**This plan includes 5 mandatory review checkpoints where work MUST stop for external review.**
+
+At each checkpoint:
+1. **STOP all work** and commit your code
+2. **Write any questions** you have to `api/.claude/.reviews/checkpoint-X-questions.md` (where X is the checkpoint number)
+3. **Request external review** by providing:
+   - This WORK_PLAN.md file
+   - The REVIEW_PLAN.md file  
+   - The checkpoint number
+   - All code and artifacts created
+4. **Wait for approval** before continuing to next section
+5. **If you wrote questions**, wait for answers to be provided in the same questions file before proceeding
+
+**If no review response within 48 hours**:
+- Document any concerns in `api/.claude/.reviews/checkpoint-X-pending.md`
+- If blocking critical issues exist, document in `api/.claude/.reviews/checkpoint-X-blockers.md`
+- For non-critical work, proceed with caution and flag for later review
+- Critical security or data loss risks MUST wait for review
+
+## Development Methodology: Test-Driven Development (TDD)
+
+**IMPORTANT**: Continue following TDD practices from previous phases:
+1. **Write tests FIRST** - Container tests, deployment tests
+2. **Run tests to see initial state** - They should FAIL if implementation doesn't exist, or PASS if refactoring existing code
+3. **Write minimal code to make tests PASS** - No more than necessary
+4. **REFACTOR** - Optimize while keeping tests green
+5. **Document as you go** - Add comments and documentation
+
+**Note on test failures**: If tests pass on first run, verify they fail when the implementation is removed or broken. This confirms the tests are actually testing something.
+
+## Done Criteria Checklist
+- [ ] Docker image builds successfully
+- [ ] Image size < 50MB (or documented why larger with optimization attempts)
+- [ ] Zero CRITICAL and HIGH security vulnerabilities (MEDIUM require documented justification)
+- [ ] Container runs with health checks
+- [ ] Kubernetes deployment successful (or simulated with dry-run if no cluster)
+- [ ] Liveness/readiness probes work
+- [ ] Secrets properly managed
+- [ ] No secrets in images or logs
+- [ ] HPA metrics exposed
+- [ ] All documentation complete
+
+**For any unmet criteria**: Document the reason and mitigation in `api/.claude/.reviews/phase-7-exceptions.md`
+
+## Work Breakdown with Review Checkpoints
+
+### 7.1 Docker Foundation (3-4 work units)
+
+**Work Unit Definition**: 1 work unit ≈ 4-6 hours of focused development time
+
+**Work Unit Context:**
+- **Complexity**: Medium - Multi-stage optimization requires careful planning
+- **Scope**: ~200 lines across 3-4 files
+- **Key Components**: 
+  - Multi-stage Dockerfile (~100 lines)
+  - Docker ignore file (~20 lines)
+  - Build configuration (~30 lines)
+  - Container tests (~50 lines)
+- **Patterns**: Multi-stage builds, static linking, minimal runtime
+
+#### Task 7.1.1: Write Container Tests First
+
+**💡 Junior Dev Tip**: Start by reading the [Docker Best Practices](../../junior-dev-helper/docker-best-practices.md) guide to understand multi-stage builds and static binary compilation.
+
+Create `tests/container_tests.rs`:
+```rust
+#[cfg(test)]
+mod container_tests {
+    use std::process::Command;
+    use std::time::Duration;
+    
+    #[test]
+    fn test_docker_build_succeeds() {
+        let output = Command::new("docker")
+            .args(&["build", "-t", "pcf-api:test", "."])
+            .output()
+            .expect("Failed to execute docker build");
+            
+        assert!(output.status.success(), "Docker build failed");
+    }
+    
+    #[test]
+    fn test_image_size_under_50mb() {
+        // Build image first
+        Command::new("docker")
+            .args(&["build", "-t", "pcf-api:test", "."])
+            .output()
+            .expect("Failed to build image");
+            
+        // Check size
+        let output = Command::new("docker")
+            .args(&["images", "pcf-api:test", "--format", "{{.Size}}"])
+            .output()
+            .expect("Failed to get image size");
+            
+        let size_str = String::from_utf8_lossy(&output.stdout);
+        let size_mb = parse_docker_size(&size_str);
+        
+        assert!(size_mb < 50.0, "Image size {}MB exceeds 50MB limit", size_mb);
+    }
+    
+    #[test]
+    fn test_container_health_check() {
+        // Start container
+        let container_id = start_test_container();
+        
+        // Wait for health check
+        std::thread::sleep(Duration::from_secs(5));
+        
+        // Check health status
+        let output = Command::new("docker")
+            .args(&["inspect", "--format", "{{.State.Health.Status}}", &container_id])
+            .output()
+            .expect("Failed to inspect container");
+            
+        let status = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(status.trim(), "healthy");
+        
+        // Cleanup
+        stop_container(&container_id);
+    }
+    
+    #[test]
+    fn test_no_secrets_in_image() {
+        // Scan image for common secret patterns
+        let output = Command::new("docker")
+            .args(&["run", "--rm", "pcf-api:test", "grep", "-r", "SECRET\\|PASSWORD\\|KEY", "/"])
+            .output()
+            .expect("Failed to scan for secrets");
+            
+        assert!(output.stdout.is_empty(), "Found potential secrets in image");
+    }
+    
+    // Helper functions - implement these based on your needs
+    fn parse_docker_size(size_str: &str) -> f64 {
+        // Parse Docker size string (e.g., "45.2MB" -> 45.2)
+        let cleaned = size_str.trim();
+        if let Some(mb_pos) = cleaned.find("MB") {
+            cleaned[..mb_pos].parse().unwrap_or(999.0)
+        } else if let Some(gb_pos) = cleaned.find("GB") {
+            cleaned[..gb_pos].parse::<f64>().unwrap_or(999.0) * 1024.0
+        } else {
+            999.0 // Default to large number to fail test
+        }
+    }
+    
+    fn start_test_container() -> String {
+        let output = Command::new("docker")
+            .args(&["run", "-d", "--name", "test-pcf-api", "-p", "8080:8080", "pcf-api:test"])
+            .output()
+            .expect("Failed to start container");
+        
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+    
+    fn stop_container(container_id: &str) {
+        Command::new("docker")
+            .args(&["stop", container_id])
+            .output()
+            .expect("Failed to stop container");
+            
+        Command::new("docker")
+            .args(&["rm", container_id])
+            .output()
+            .expect("Failed to remove container");
+    }
+}
+```
+
+#### Task 7.1.2: Create Multi-stage Dockerfile
+
+Create `Dockerfile`:
+```dockerfile
+# Stage 1: Chef - Dependency caching
+FROM lukemathwalker/cargo-chef:latest-rust-1.75 AS chef
+WORKDIR /app
+
+# Stage 2: Planner - Generate dependency list
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 3: Builder - Build dependencies and application
+FROM chef AS builder
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build dependencies (cached if unchanged)
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Build application
+COPY . .
+# Build static binary with musl
+RUN rustup target add x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Stage 4: Runtime - Minimal scratch image
+FROM scratch AS runtime
+
+# Copy binary from builder
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/pcf-api /pcf-api
+
+# Copy any required runtime files (certs, etc)
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Create non-root user info (static)
+COPY --from=builder /etc/passwd /etc/passwd
+
+# Use non-root user
+USER 1000
+
+# Configure structured logging (SPEC requirement)
+ENV RUST_LOG=info
+ENV LOG_FORMAT=json
+ENV LOG_TIMESTAMP_FORMAT=rfc3339
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/pcf-api", "healthcheck"]
+# Timeout must be 5s per SPEC.md requirement
+
+# Run binary
+ENTRYPOINT ["/pcf-api"]
+```
+
+#### Task 7.1.3: Create Docker Ignore File
+
+Create `.dockerignore`:
+```
+# Build artifacts
+target/
+Dockerfile
+.dockerignore
+
+# Development files
+.git/
+.gitignore
+*.md
+.claude/
+scripts/
+tests/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+```
+
+#### Task 7.1.4: Configure Structured Logging
+
+Update your Rust application to support JSON logging per SPEC requirements:
+
+In `src/main.rs` or `src/config.rs`:
+```rust
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+pub fn init_logging() {
+    let log_format = std::env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string());
+    
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env());
+    
+    if log_format == "json" {
+        // JSON format for production (per SPEC.md)
+        subscriber
+            .with(tracing_subscriber::fmt::layer()
+                .json()
+                .with_timestamp(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
+                .with_target(true)
+                .with_level(true)
+                .with_thread_ids(true)
+                .with_thread_names(false)
+                .with_file(true)
+                .with_line_number(true))
+            .init();
+    } else {
+        // Pretty format for development
+        subscriber
+            .with(tracing_subscriber::fmt::layer()
+                .pretty()
+                .with_timestamp(tracing_subscriber::fmt::time::UtcTime::rfc_3339()))
+            .init();
+    }
+    
+    tracing::info!(
+        log_format = %log_format,
+        version = env!("CARGO_PKG_VERSION"),
+        "Logging initialized"
+    );
+}
+```
+
+#### Task 7.1.5: Implement Health Check CLI
+
+Add health check command to `src/main.rs`:
+```rust
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "pcf-api")]
+#[command(about = "PCF API Server", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run health check and exit
+    Healthcheck,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    
+    match cli.command {
+        Some(Commands::Healthcheck) => {
+            // Simple HTTP health check
+            let response = reqwest::get("http://localhost:8080/health")
+                .await?;
+                
+            if response.status().is_success() {
+                std::process::exit(0);
+            } else {
+                std::process::exit(1);
+            }
+        }
+        None => {
+            // Normal server startup
+            run_server().await?;
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### 🛑 CHECKPOINT 1: Docker Foundation Review
+**Deliverables**:
+- Multi-stage Dockerfile with static binary
+- Container builds successfully
+- Health check integration working
+- Basic container tests passing
+- Docker ignore file configured
+
+---
+
+### 7.2 Image Optimization (2-3 work units)
+
+**Work Unit Context:**
+- **Complexity**: Medium - Requires understanding of Docker layers and caching
+- **Scope**: ~150 lines of configuration and scripts
+- **Key Components**: 
+  - Build optimization script (~50 lines)
+  - Security scanning setup (~30 lines)
+  - Size analysis tools (~30 lines)
+  - Additional tests (~40 lines)
+- **Patterns**: Layer caching, minimal dependencies, security hardening
+
+#### Task 7.2.1: Optimize Build Caching
+
+**🔧 Optimization Tip**: Read [Container Security Guide](../../junior-dev-helper/container-security-guide.md) to understand vulnerability scanning and image hardening. If unavailable, the scripts below include comments explaining key concepts.
+
+Create `scripts/build-container.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+IMAGE_NAME="pcf-api"
+VERSION="${1:-latest}"
+
+echo "🐳 Building optimized container image..."
+
+# Build with cache mount for better dependency caching
+DOCKER_BUILDKIT=1 docker build \
+    --build-arg BUILDKIT_INLINE_CACHE=1 \
+    --cache-from ${IMAGE_NAME}:cache \
+    --tag ${IMAGE_NAME}:${VERSION} \
+    --tag ${IMAGE_NAME}:cache \
+    --target runtime \
+    .
+
+# Analyze image size
+echo "📊 Image size analysis:"
+docker images ${IMAGE_NAME}:${VERSION} --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+# Show layer details
+echo -e "\n📦 Layer breakdown:"
+docker history ${IMAGE_NAME}:${VERSION} --format "table {{.CreatedBy}}\t{{.Size}}"
+
+# Verify size is under limit
+SIZE=$(docker images ${IMAGE_NAME}:${VERSION} --format "{{.Size}}" | sed 's/MB//')
+if (( $(echo "$SIZE < 50" | bc -l) )); then
+    echo -e "\n✅ Image size ${SIZE}MB is under 50MB limit!"
+else
+    echo -e "\n⚠️  Image size ${SIZE}MB exceeds 50MB limit!"
+    echo "   Optimization suggestions:"
+    echo "   - Use scratch or distroless base image"
+    echo "   - Ensure static linking with musl"
+    echo "   - Remove unnecessary dependencies"
+    echo "   - Use multi-stage build effectively"
+    
+    # Document the issue but don't fail if close
+    if (( $(echo "$SIZE < 60" | bc -l) )); then
+        echo "   ℹ️  Size is close to target. Document optimization attempts in phase-7-exceptions.md"
+        exit 0
+    else
+        exit 1
+    fi
+fi
+```
+
+#### Task 7.2.2: Implement Security Scanning
+
+Create `scripts/scan-container.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+IMAGE_NAME="${1:-pcf-api:latest}"
+
+echo "🔍 Scanning container for vulnerabilities..."
+
+# Check if Trivy is available
+if command -v trivy &> /dev/null; then
+    echo "Using local Trivy installation..."
+    trivy image --severity CRITICAL,HIGH ${IMAGE_NAME}
+    SCAN_EXIT_CODE=$?
+else
+    echo "Using Trivy Docker image..."
+    docker run --rm \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy image \
+        --severity CRITICAL,HIGH \
+        ${IMAGE_NAME}
+    SCAN_EXIT_CODE=$?
+fi
+
+# Handle scan results
+if [ $SCAN_EXIT_CODE -eq 0 ]; then
+    echo "✅ No CRITICAL or HIGH vulnerabilities found!"
+else
+    echo "⚠️  Security vulnerabilities detected!"
+    echo "   Running detailed scan for documentation..."
+    
+    # Run again to show MEDIUM vulnerabilities
+    docker run --rm \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy image \
+        --severity CRITICAL,HIGH,MEDIUM \
+        ${IMAGE_NAME} || true
+    
+    echo ""
+    echo "Document any accepted vulnerabilities in api/.claude/.reviews/security-exceptions.md"
+    echo "Include: CVE ID, severity, justification, and mitigation"
+    exit 1
+fi
+
+# Additional checks
+echo -e "\n🔐 Checking for exposed secrets..."
+docker run --rm ${IMAGE_NAME} sh -c 'grep -r "SECRET\|PASSWORD\|API_KEY" / 2>/dev/null || true' | grep -v "Binary file" || echo "✅ No secrets found"
+
+# Check running as non-root
+echo -e "\n👤 Checking user permissions..."
+USER=$(docker run --rm ${IMAGE_NAME} whoami)
+if [ "$USER" != "root" ]; then
+    echo "✅ Running as non-root user: $USER"
+else
+    echo "❌ Container runs as root!"
+    exit 1
+fi
+```
+
+#### Task 7.2.3: Create Build Cache Strategy
+
+Update `Dockerfile` with better caching:
+```dockerfile
+# Add at the beginning of builder stage
+# Cache mount for cargo registry
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --target x86_64-unknown-linux-musl
+```
+
+### 🛑 CHECKPOINT 2: Image Optimization Review
+**Deliverables**:
+- Build caching implemented
+- Security scanning passing (zero CRITICAL/HIGH vulnerabilities)
+- Image size verified < 50MB (or documented why larger)
+- Non-root user verified
+- Build scripts created with error handling
+
+---
+
+### 7.3 Kubernetes Manifests (3-4 work units)
+
+**Work Unit Context:**
+- **Complexity**: Medium - Kubernetes resources require careful configuration
+- **Scope**: ~400 lines across 5-6 files
+- **Key Components**: 
+  - Deployment manifest (~150 lines)
+  - Service definition (~50 lines)
+  - ConfigMap (~100 lines)
+  - Development values (~50 lines)
+  - Kubernetes tests (~50 lines)
+- **Patterns**: Resource limits, health probes, configuration management
+
+#### Task 7.3.1: Write Kubernetes Tests
+
+**☸️ K8s Tip**: Review [Kubernetes Deployment Guide](../../junior-dev-helper/kubernetes-deployment-guide.md) for best practices on resource limits and probe configuration. The deployment YAML below includes detailed comments if the guide is unavailable.
+
+Create `tests/kubernetes_tests.rs`:
+```rust
+#[cfg(test)]
+mod kubernetes_tests {
+    use k8s_openapi::api::apps::v1::Deployment;
+    use k8s_openapi::api::core::v1::{Service, ConfigMap};
+    use serde_yaml;
+    
+    #[test]
+    fn test_deployment_has_resource_limits() {
+        let yaml = std::fs::read_to_string("k8s/deployment.yaml")
+            .expect("Failed to read deployment");
+        let deployment: Deployment = serde_yaml::from_str(&yaml)
+            .expect("Failed to parse deployment");
+            
+        let container = &deployment.spec.unwrap().template.spec.unwrap().containers[0];
+        assert!(container.resources.is_some(), "Container missing resource limits");
+        
+        let resources = container.resources.as_ref().unwrap();
+        assert!(resources.limits.is_some(), "Missing resource limits");
+        assert!(resources.requests.is_some(), "Missing resource requests");
+    }
+    
+    #[test]
+    fn test_deployment_has_health_probes() {
+        let yaml = std::fs::read_to_string("k8s/deployment.yaml")
+            .expect("Failed to read deployment");
+        let deployment: Deployment = serde_yaml::from_str(&yaml)
+            .expect("Failed to parse deployment");
+            
+        let container = &deployment.spec.unwrap().template.spec.unwrap().containers[0];
+        assert!(container.liveness_probe.is_some(), "Missing liveness probe");
+        assert!(container.readiness_probe.is_some(), "Missing readiness probe");
+    }
+    
+    #[test]
+    fn test_configmap_valid() {
+        let yaml = std::fs::read_to_string("k8s/configmap.yaml")
+            .expect("Failed to read configmap");
+        let _configmap: ConfigMap = serde_yaml::from_str(&yaml)
+            .expect("Failed to parse configmap");
+    }
+}
+```
+
+#### Task 7.3.2: Create Kubernetes Deployment
+
+Create `k8s/deployment.yaml`:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pcf-api
+  labels:
+    app: pcf-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pcf-api
+  template:
+    metadata:
+      labels:
+        app: pcf-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: pcf-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: pcf-api
+        image: pcf-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info,pcf_api=debug"
+        - name: SERVER__HOST
+          value: "0.0.0.0"
+        - name: SERVER__PORT
+          value: "8080"
+        envFrom:
+        - configMapRef:
+            name: pcf-api-config
+        - secretRef:
+            name: pcf-api-secrets
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+```
+
+#### Task 7.3.3: Create Service Definition
+
+Create `k8s/service.yaml`:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pcf-api
+  labels:
+    app: pcf-api
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: pcf-api
+```
+
+#### Task 7.3.4: Create ConfigMap
+
+Create `k8s/configmap.yaml`:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pcf-api-config
+data:
+  # Non-sensitive configuration
+  GRAPHQL__DEPTH_LIMIT: "15"
+  GRAPHQL__COMPLEXITY_LIMIT: "1000"
+  CACHE__TTL_SECONDS: "300"
+  CACHE__MAX_SIZE: "1000"
+  
+  # Feature flags
+  FEATURES__DEMO_MODE: "false"
+  FEATURES__METRICS_ENABLED: "true"
+  
+  # Observability
+  TRACING__ENABLED: "true"
+  TRACING__SAMPLE_RATE: "0.1"
+```
+
+### 🛑 CHECKPOINT 3: Kubernetes Manifests Review
+**Deliverables**:
+- Deployment manifest with proper configuration
+- Service definition created
+- ConfigMap for non-sensitive config
+- Resource limits and requests defined
+- Health probes configured
+- Security context applied
+
+---
+
+### 7.4 Secret Management (2-3 work units)
+
+**Work Unit Context:**
+- **Complexity**: High - Security is critical
+- **Scope**: ~200 lines across 4-5 files
+- **Key Components**: 
+  - Secret manifest template (~50 lines)
+  - Secret injection script (~50 lines)
+  - Environment handling (~50 lines)
+  - Secret rotation support (~50 lines)
+- **Patterns**: Secret separation, encryption at rest, rotation capability
+
+#### Task 7.4.1: Create Secret Management Tests
+
+**🔐 Security First**: Study [Secret Management Tutorial](../../junior-dev-helper/secret-management-tutorial.md) to understand Kubernetes secrets and environment variable best practices. If the guide is missing, follow the security patterns in the examples below.
+
+Create `tests/secret_tests.rs`:
+```rust
+#[test]
+fn test_no_secrets_in_configmap() {
+    let yaml = std::fs::read_to_string("k8s/configmap.yaml")
+        .expect("Failed to read configmap");
+        
+    let secret_patterns = ["PASSWORD", "SECRET", "KEY", "TOKEN", "PRIVATE"];
+    
+    for pattern in &secret_patterns {
+        assert!(!yaml.contains(pattern), 
+            "Found potential secret pattern '{}' in ConfigMap", pattern);
+    }
+}
+
+#[test]
+fn test_secret_template_valid() {
+    let yaml = std::fs::read_to_string("k8s/secret-template.yaml")
+        .expect("Failed to read secret template");
+        
+    assert!(yaml.contains("stringData:"), "Secret should use stringData");
+    assert!(yaml.contains("# REPLACE_"), "Secret should have replacement markers");
+}
+```
+
+#### Task 7.4.2: Create Secret Template
+
+Create `k8s/secret-template.yaml`:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pcf-api-secrets
+type: Opaque
+stringData:
+  # Database credentials
+  DATABASE__URL: "postgresql://# REPLACE_DB_USER #:# REPLACE_DB_PASSWORD #@# REPLACE_DB_HOST #:5432/# REPLACE_DB_NAME #"
+  
+  # Authentication secrets
+  AUTH__JWT_SECRET: "# REPLACE_JWT_SECRET #"
+  AUTH__REFRESH_SECRET: "# REPLACE_REFRESH_SECRET #"
+  
+  # External service credentials
+  SPICEDB__PRESHARED_KEY: "# REPLACE_SPICEDB_KEY #"
+  
+  # Monitoring credentials
+  METRICS__BASIC_AUTH_PASSWORD: "# REPLACE_METRICS_PASSWORD #"
+```
+
+#### Task 7.4.3: Create Secret Injection Script
+
+Create `scripts/create-secrets.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+NAMESPACE="${NAMESPACE:-default}"
+ENV_FILE="${1:-.env.production}"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "❌ Environment file $ENV_FILE not found!"
+    echo "Usage: $0 [env-file]"
+    exit 1
+fi
+
+echo "🔐 Creating Kubernetes secrets from $ENV_FILE..."
+
+# Validate required variables
+REQUIRED_VARS=("DATABASE_USER" "DATABASE_PASSWORD" "DATABASE_HOST" "DATABASE_NAME" 
+               "JWT_SECRET" "REFRESH_SECRET" "SPICEDB_PRESHARED_KEY" "METRICS_PASSWORD")
+
+# Read secrets from env file
+set -a  # Export all variables
+source "$ENV_FILE"
+set +a
+
+# Check all required variables are set
+MISSING_VARS=()
+for var in "${REQUIRED_VARS[@]}"; do
+    if [ -z "${!var}" ]; then
+        MISSING_VARS+=("$var")
+    fi
+done
+
+if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+    echo "❌ Missing required environment variables:"
+    printf '   - %s\n' "${MISSING_VARS[@]}"
+    echo ""
+    echo "Example .env file:"
+    echo "DATABASE_USER=pcf_user"
+    echo "DATABASE_PASSWORD=changeme"
+    echo "DATABASE_HOST=postgres"
+    echo "DATABASE_NAME=pcf_db"
+    echo "JWT_SECRET=$(openssl rand -base64 32)"
+    echo "REFRESH_SECRET=$(openssl rand -base64 32)"
+    echo "SPICEDB_PRESHARED_KEY=$(openssl rand -base64 32)"
+    echo "METRICS_PASSWORD=$(openssl rand -base64 16)"
+    exit 1
+fi
+
+# Create secret from template
+cp k8s/secret-template.yaml /tmp/secret.yaml
+
+# Replace placeholders (with proper escaping)
+for var in "${REQUIRED_VARS[@]}"; do
+    # Escape special characters for sed
+    escaped_value=$(printf '%s\n' "${!var}" | sed 's:[\\&/]:\\\\&:g')
+    sed -i "s/# REPLACE_${var} #/${escaped_value}/g" /tmp/secret.yaml
+done
+
+# Special handling for DATABASE_URL components
+sed -i "s/# REPLACE_DB_USER #/${DATABASE_USER}/g" /tmp/secret.yaml
+sed -i "s/# REPLACE_DB_PASSWORD #/${DATABASE_PASSWORD}/g" /tmp/secret.yaml
+sed -i "s/# REPLACE_DB_HOST #/${DATABASE_HOST}/g" /tmp/secret.yaml
+sed -i "s/# REPLACE_DB_NAME #/${DATABASE_NAME}/g" /tmp/secret.yaml
+
+# Apply to Kubernetes
+kubectl apply -f /tmp/secret.yaml -n "$NAMESPACE"
+
+# Clean up
+rm -f /tmp/secret.yaml
+
+echo "✅ Secrets created successfully!"
+
+# Verify secrets
+echo -e "\n📋 Verifying secrets..."
+kubectl get secret pcf-api-secrets -n "$NAMESPACE" -o jsonpath='{.data}' | jq 'keys'
+```
+
+#### Task 7.4.4: Update Application for Secret Handling
+
+Update `src/config.rs` to ensure no secret logging:
+```rust
+use figment::providers::{Env, Format, Toml};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub server: ServerConfig,
+    pub database: DatabaseConfig,
+    // ... other configs
+}
+
+#[derive(Deserialize)]
+pub struct DatabaseConfig {
+    #[serde(deserialize_with = "deserialize_secret")]
+    pub url: Secret<String>,
+}
+
+// Custom Debug implementation to hide secrets
+impl std::fmt::Debug for DatabaseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatabaseConfig")
+            .field("url", &"***REDACTED***")
+            .finish()
+    }
+}
+
+// Ensure secrets are not logged
+pub fn load_config() -> Result<Config, figment::Error> {
+    let config = Figment::new()
+        .merge(Toml::file("config/default.toml"))
+        .merge(Env::prefixed(""))
+        .extract()?;
+        
+    // Log config without secrets
+    tracing::info!("Loaded configuration: {:?}", config);
+    
+    Ok(config)
+}
+```
+
+### 🛑 CHECKPOINT 4: Secret Management Review
+**Deliverables**:
+- Secret template created
+- Secret injection script working
+- No secrets in ConfigMap
+- Application prevents secret logging
+- Secret rotation capability demonstrated
+
+---
+
+### 7.5 Production Readiness (2-3 work units)
+
+**Work Unit Context:**
+- **Complexity**: Medium - Integration of all components
+- **Scope**: ~300 lines across 5-6 files
+- **Key Components**: 
+  - HPA configuration (~50 lines)
+  - Deployment script (~100 lines)
+  - Integration tests (~100 lines)
+  - Documentation (~50 lines)
+- **Patterns**: Auto-scaling, monitoring integration, deployment automation
+
+#### Task 7.5.1: Create HPA Configuration
+
+**📈 Scaling Tip**: Check [Container Debugging Guide](../../junior-dev-helper/container-debugging-guide.md) for troubleshooting HPA and resource usage issues. The HPA configuration below includes comments explaining each setting.
+
+Create `k8s/hpa.yaml`:
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pcf-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pcf-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+```
+
+#### Task 7.5.2: Create Deployment Script
+
+Create `scripts/deploy-k8s.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+NAMESPACE="${NAMESPACE:-default}"
+IMAGE_TAG="${1:-latest}"
+ENV="${2:-development}"
+
+echo "🚀 Deploying PCF API to Kubernetes..."
+echo "   Namespace: $NAMESPACE"
+echo "   Image Tag: $IMAGE_TAG"
+echo "   Environment: $ENV"
+
+# Check if kubectl is available
+if ! command -v kubectl &> /dev/null; then
+    echo "⚠️  kubectl not found! For testing without Kubernetes:"
+    echo "   - Use 'kubectl --dry-run=client' to validate YAML"
+    echo "   - Use Docker Compose as an alternative"
+    echo "   - Document this limitation in phase-7-exceptions.md"
+    exit 1
+fi
+
+# Create namespace if it doesn't exist
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - || {
+    echo "⚠️  Failed to create namespace. If no cluster access:"
+    echo "   Run with --dry-run=client to validate configuration"
+    exit 1
+}
+
+# Update image tag in deployment
+sed -i "s|image: pcf-api:.*|image: pcf-api:${IMAGE_TAG}|g" k8s/deployment.yaml
+
+# Apply configurations in order
+echo -e "\n📦 Applying ConfigMap..."
+kubectl apply -f k8s/configmap.yaml -n "$NAMESPACE" || {
+    echo "   Dry run: kubectl apply --dry-run=client -f k8s/configmap.yaml"
+}
+
+echo -e "\n🔐 Checking for secrets..."
+if ! kubectl get secret pcf-api-secrets -n "$NAMESPACE" &>/dev/null; then
+    echo "⚠️  Secrets not found! Run scripts/create-secrets.sh first"
+    echo "   Or create manually: kubectl create secret generic pcf-api-secrets --from-env-file=.env"
+    
+    # Don't exit if in dry-run mode
+    if [[ "${DRY_RUN:-false}" != "true" ]]; then
+        exit 1
+    fi
+fi
+
+echo -e "\n🌐 Applying Service..."
+kubectl apply -f k8s/service.yaml -n "$NAMESPACE"
+
+echo -e "\n🚀 Applying Deployment..."
+kubectl apply -f k8s/deployment.yaml -n "$NAMESPACE"
+
+echo -e "\n📈 Applying HPA..."
+kubectl apply -f k8s/hpa.yaml -n "$NAMESPACE"
+
+# Wait for rollout
+echo -e "\n⏳ Waiting for rollout to complete..."
+kubectl rollout status deployment/pcf-api -n "$NAMESPACE" --timeout=5m
+
+# Verify deployment
+echo -e "\n✅ Deployment complete! Checking status..."
+kubectl get pods -n "$NAMESPACE" -l app=pcf-api
+kubectl get hpa -n "$NAMESPACE"
+
+# Test health endpoint
+echo -e "\n🏥 Testing health endpoint..."
+POD=$(kubectl get pod -n "$NAMESPACE" -l app=pcf-api -o jsonpath="{.items[0].metadata.name}")
+kubectl exec -n "$NAMESPACE" "$POD" -- /pcf-api healthcheck
+
+echo -e "\n🎉 Deployment successful!"
+```
+
+#### Task 7.5.3: Create Full Integration Test
+
+Create `tests/integration_test.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+echo "🧪 Running full container integration test..."
+
+# Build container
+echo "1. Building container..."
+./scripts/build-container.sh
+
+# Scan for vulnerabilities
+echo -e "\n2. Security scanning..."
+./scripts/scan-container.sh
+
+# Deploy to test namespace
+echo -e "\n3. Deploying to test namespace..."
+NAMESPACE=test ./scripts/deploy-k8s.sh latest development
+
+# Run integration tests
+echo -e "\n4. Running integration tests..."
+cargo test --test integration_tests
+
+# Check metrics endpoint
+echo -e "\n5. Verifying metrics..."
+kubectl port-forward -n test svc/pcf-api 8080:80 &
+PF_PID=$!
+sleep 5
+
+curl -s http://localhost:8080/metrics | grep -q "http_requests_total"
+kill $PF_PID
+
+# Clean up
+echo -e "\n6. Cleaning up test namespace..."
+kubectl delete namespace test
+
+echo -e "\n✅ All integration tests passed!"
+```
+
+#### Task 7.5.4: Implement Rollback Strategy
+
+Create `scripts/rollback-deployment.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+DEPLOYMENT_NAME="${1:-pcf-api}"
+NAMESPACE="${2:-default}"
+
+echo "🔄 Rolling back deployment: $DEPLOYMENT_NAME"
+
+# Check current rollout status
+kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE || true
+
+# Show rollout history
+echo "📜 Rollout history:"
+kubectl rollout history deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+
+# Perform rollback
+if [ "${3:-}" = "--to-revision" ]; then
+    REVISION="${4:-1}"
+    echo "⏮️  Rolling back to revision $REVISION..."
+    kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE --to-revision=$REVISION
+else
+    echo "⏮️  Rolling back to previous version..."
+    kubectl rollout undo deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+fi
+
+# Monitor rollback
+echo "👀 Monitoring rollback..."
+kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+
+# Verify pods are running
+echo "✅ Rollback complete. Current pods:"
+kubectl get pods -n $NAMESPACE -l app=$DEPLOYMENT_NAME
+```
+
+**Testing Rollback**:
+```bash
+# Save current version
+kubectl annotate deployment pcf-api kubernetes.io/change-cause="v1.0.0 - Initial deployment"
+
+# Deploy bad version
+kubectl set image deployment/pcf-api pcf-api=pcf-api:bad-version
+
+# When it fails, rollback
+./scripts/rollback-deployment.sh pcf-api
+
+# Or rollback to specific revision
+./scripts/rollback-deployment.sh pcf-api default --to-revision 1
+```
+
+#### Task 7.5.5: Create Comprehensive Documentation
+
+Create `docs/deployment.md`:
+```markdown
+# PCF API Deployment Guide
+
+## Prerequisites
+- Docker 20.10+
+- Kubernetes 1.25+
+- kubectl configured
+- Just command runner
+
+## Quick Start
+
+1. Build the container:
+   ```bash
+   just docker-build
+   ```
+
+2. Create secrets:
+   ```bash
+   ./scripts/create-secrets.sh .env.production
+   ```
+
+3. Deploy to Kubernetes:
+   ```bash
+   ./scripts/deploy-k8s.sh v1.0.0 production
+   ```
+
+## Configuration
+
+### Environment Variables
+See `k8s/configmap.yaml` for non-sensitive configuration options.
+
+### Secrets
+Required secrets (see `k8s/secret-template.yaml`):
+- DATABASE__URL
+- AUTH__JWT_SECRET
+- AUTH__REFRESH_SECRET
+- SPICEDB__PRESHARED_KEY
+- METRICS__BASIC_AUTH_PASSWORD
+
+### Resource Requirements
+- Minimum: 100m CPU, 64Mi memory
+- Maximum: 500m CPU, 256Mi memory
+- Recommended: 3-5 replicas
+
+## Monitoring
+
+The application exposes Prometheus metrics at `/metrics`.
+
+HPA scales based on:
+- CPU utilization (70%)
+- Memory utilization (80%)
+- Request rate (1000 RPS per pod)
+
+## Troubleshooting
+
+See [Container Debugging Guide](../api/.claude/junior-dev-helper/container-debugging-guide.md) for common issues.
+```
+
+### 🛑 CHECKPOINT 5: Production Readiness Review
+**Deliverables**:
+- HPA configuration with proper metrics
+- Deployment script automating full process
+- Integration tests passing
+- Comprehensive documentation
+- Full deployment verified in test environment
+
+---
+
+## Common Issues and Solutions
+
+### Docker Build Failures
+
+#### Problem: "no matching manifest for linux/arm64"
+**Cause**: Building on M1 Mac without multi-arch support
+**Solution**:
+```bash
+# Option 1: Build for AMD64
+docker buildx build --platform linux/amd64 -t pcf-api:latest .
+
+# Option 2: Use buildx for multi-arch
+docker buildx create --use
+docker buildx build --platform linux/amd64,linux/arm64 -t pcf-api:latest .
+```
+
+#### Problem: "cargo chef cook" fails with SSL errors
+**Cause**: Corporate proxy or SSL certificate issues
+**Solution**:
+```dockerfile
+# Add certificates before cargo chef cook
+RUN apt-get update && apt-get install -y ca-certificates
+# Or mount corporate certs
+COPY corporate-ca.crt /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+```
+
+#### Problem: Container fails health check
+**Solution**: 
+1. Ensure the health check endpoint is accessible
+2. Verify the binary includes the healthcheck subcommand
+3. Check container logs: `docker logs <container-id>`
+4. Test health endpoint manually: `docker exec <container-id> /pcf-api healthcheck`
+
+#### Problem: Image size exceeds 50MB
+**Solution**:
+1. Verify MUSL static linking is working
+2. Check for unnecessary dependencies in Cargo.toml
+3. Ensure using scratch or distroless base
+4. Analyze layers: `docker history pcf-api:latest --no-trunc`
+5. Remove debug symbols: Add `strip = true` to Cargo.toml release profile
+
+### Kubernetes Deployment Issues
+
+#### Problem: CrashLoopBackOff
+**Common Causes**:
+1. Missing environment variables
+2. Can't connect to database
+3. Insufficient memory
+
+**Debugging Steps**:
+```bash
+# Check logs
+kubectl logs <pod-name> --previous
+
+# Check events
+kubectl describe pod <pod-name>
+
+# Test with debug overrides
+kubectl run debug-pod --image=pcf-api:latest --command -- sleep 3600
+kubectl exec -it debug-pod -- /bin/sh
+```
+
+#### Problem: Secrets not found
+**Solution**:
+```bash
+# Create from .env file
+kubectl create secret generic pcf-api-secrets --from-env-file=.env.production
+
+# Or use the script
+./scripts/create-secrets.sh .env.production
+
+# Verify secrets
+kubectl get secret pcf-api-secrets -o yaml
+```
+
+#### Problem: "kubectl not found" or no cluster access
+**Solution**:
+```bash
+# Validate YAML without cluster
+kubectl apply --dry-run=client -f k8s/
+
+# Use Docker Compose as alternative
+docker-compose up -d
+
+# Document in phase-7-exceptions.md
+echo "No Kubernetes cluster available for testing" >> api/.claude/.reviews/phase-7-exceptions.md
+```
+
+### HPA Not Scaling
+
+#### Problem: HPA shows <unknown> for metrics
+**Solution**:
+```bash
+# Verify metrics-server is installed
+kubectl get deployment metrics-server -n kube-system
+
+# Check resource requests are set
+kubectl get deployment pcf-api -o yaml | grep -A5 resources:
+
+# Install metrics-server if missing
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+#### Problem: HPA not responding to load
+**Solution**:
+1. Verify CPU/memory requests are set (required for HPA)
+2. Check metrics are being scraped: `kubectl top pod`
+3. Generate load to test: 
+   ```bash
+   kubectl run -i --tty load-generator --rm --image=busybox --restart=Never -- \
+     /bin/sh -c "while sleep 0.01; do wget -q -O- http://pcf-api/health; done"
+   ```
+
+### Security Issues
+
+#### Problem: Vulnerabilities found in scan
+**Solution**:
+1. Update base image to latest
+2. Update dependencies: `cargo update`
+3. For MEDIUM vulnerabilities, document in `api/.claude/.reviews/security-exceptions.md`:
+   ```markdown
+   ## Security Exception: CVE-2023-XXXXX
+   - Severity: MEDIUM
+   - Component: libssl1.1
+   - Justification: No exploit available, low risk in container environment
+   - Mitigation: Network policies restrict access
+   ```
+
+#### Problem: Secrets exposed in logs
+**Solution**:
+1. Implement proper Debug traits for sensitive configs
+2. Use secret management types (e.g., secrecy crate)
+3. Audit logs: `kubectl logs <pod> | grep -i "secret\|password\|key"`
+4. Enable JSON logging to control output format
+
+## Security Considerations
+
+1. **No root user**: Container runs as UID 1000
+2. **Read-only filesystem**: Only /tmp is writable
+3. **No capabilities**: All Linux capabilities dropped
+4. **Network policies**: Implement K8s network policies
+5. **Secret rotation**: Support updating secrets without downtime
+
+## Success Criteria
+
+By the end of Phase 7:
+1. Docker image < 50MB
+2. Zero security vulnerabilities
+3. Kubernetes deployment working
+4. Health checks operational
+5. Secrets properly managed
+6. HPA scaling based on load
+7. Full documentation complete
+
+## Next Phase Preview
+
+Phase 8 will focus on:
+- CI/CD pipeline setup
+- Automated testing and deployment
+- Release management
+- Monitoring and alerting dashboards
+
+## Optional Advanced Topics
+
+### HashiCorp Vault Integration
+
+**Note**: This is an advanced topic for future enhancement. Skip if using Kubernetes secrets.
+
+For production environments requiring advanced secret management:
+
+1. **Install Vault Agent Injector**:
+```bash
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm install vault hashicorp/vault --set "injector.enabled=true"
+```
+
+2. **Annotate Deployment**:
+```yaml
+metadata:
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "pcf-api"
+    vault.hashicorp.com/agent-inject-secret-config: "secret/data/pcf-api/config"
+```
+
+3. **Access Secrets**:
+Vault will inject secrets to `/vault/secrets/config`
+
+For detailed implementation, see Phase 9 production features.
+
+### Multi-Architecture Build Support
+
+For M1 Mac support and cloud ARM instances:
+
+```bash
+# Setup buildx
+docker buildx create --name multiarch --use
+
+# Build for multiple architectures
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --tag pcf-api:latest \
+  --push .
+```
+
+**Note**: Multi-arch builds take longer but support more deployment targets.
+
+### Monitoring Integration
+
+#### Connect to Monitoring Stack
+
+1. **Add Prometheus Annotations** (already included in deployment.yaml):
+```yaml
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8080"
+```
+
+2. **ServiceMonitor for Prometheus Operator**:
+Create `k8s/servicemonitor.yaml`:
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pcf-api-metrics
+spec:
+  selector:
+    matchLabels:
+      app: pcf-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+```
+
+3. **Basic Grafana Dashboard**:
+Import dashboard or create custom dashboard for:
+- Request rate: `rate(http_requests_total[5m])`
+- Error rate: `rate(http_requests_total{status=~"5.."}[5m])`
+- Response time: `histogram_quantile(0.95, http_request_duration_seconds_bucket)`
+- Resource usage: Container CPU and memory metrics

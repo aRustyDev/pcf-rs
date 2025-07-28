@@ -24,10 +24,21 @@ Key specifications in `/api/.claude/.spec/`:
 - **[ROADMAP.md](../../ROADMAP.md)** - Phase 3 objectives (lines 68-95)
 - **[error-handling.md](../../.spec/error-handling.md)** - Error type mappings for GraphQL
 
+### Junior Developer Resources
+Comprehensive guides in `/api/.claude/junior-dev-helper/`:
+- **[GraphQL Tutorial](../../junior-dev-helper/graphql-tutorial.md)** - Core concepts and async-graphql basics
+- **[Common GraphQL Errors](../../junior-dev-helper/graphql-common-errors.md)** - Troubleshooting guide
+- **[DataLoader Guide](../../junior-dev-helper/dataloader-guide.md)** - Preventing N+1 queries
+- **[WebSocket Subscriptions](../../junior-dev-helper/websocket-subscriptions-guide.md)** - Real-time updates
+- **[Security Best Practices](../../junior-dev-helper/graphql-security-best-practices.md)** - Essential security measures
+- **[GraphQL TDD Examples](../../junior-dev-helper/graphql-tdd-examples.md)** - Test-driven development patterns
+- **[Interactive Tutorial](../../junior-dev-helper/interactive-examples/graphql-playground-tutorial.rs)** - Hands-on learning
+
 ### Quick Links
 - **Verification Script**: `scripts/verify-phase-3.sh`
 - **GraphQL Playground**: `http://localhost:8080/graphql` (demo mode only)
 - **Schema Export**: `http://localhost:8080/schema` (demo mode only)
+- **Interactive Tutorial**: `cargo run --example graphql-playground-tutorial --features demo`
 
 ## Overview
 This work plan implements a complete GraphQL API with queries, mutations, and subscriptions. Focus is on security (depth/complexity limits), performance (DataLoader pattern), and proper error handling. The implementation follows TDD practices with clear checkpoint boundaries for review and correction.
@@ -97,7 +108,9 @@ At each checkpoint:
 - **Patterns**: Dependency injection, context propagation, error mapping
 
 #### Task 3.1.1: Write GraphQL Foundation Tests First
-Create `src/graphql/mod.rs` with comprehensive test module. MUST write and run tests first to see them fail before implementing:
+Create `src/graphql/mod.rs` with comprehensive test module. MUST write and run tests first to see them fail before implementing.
+
+**📚 Junior Dev Tip**: New to GraphQL? Start with the [GraphQL Tutorial](../../junior-dev-helper/graphql-tutorial.md) and try the [Interactive Tutorial](../../junior-dev-helper/interactive-examples/graphql-playground-tutorial.rs)!
 ```rust
 #[cfg(test)]
 mod tests {
@@ -583,7 +596,9 @@ impl Query {
 ```
 
 #### Task 3.2.3: Implement DataLoader for N+1 Prevention
-Create DataLoader to batch database queries:
+Create DataLoader to batch database queries.
+
+**📚 Junior Dev Resource**: Confused about N+1 queries? Read the [DataLoader Guide](../../junior-dev-helper/dataloader-guide.md) for detailed explanations and examples!
 ```rust
 // src/graphql/dataloaders/mod.rs
 use async_graphql::dataloader::{DataLoader, Loader};
@@ -1033,7 +1048,9 @@ impl Mutation {
 - **Required Algorithms**: MUST implement pub/sub pattern, connection cleanup
 
 #### Task 3.4.1: Write Subscription Tests First
-Test WebSocket subscriptions:
+Test WebSocket subscriptions.
+
+**📚 Junior Dev Resource**: New to WebSocket subscriptions? Check out the [WebSocket Subscriptions Guide](../../junior-dev-helper/websocket-subscriptions-guide.md) for detailed patterns!
 ```rust
 #[cfg(test)]
 mod subscription_tests {
@@ -1390,7 +1407,9 @@ impl ConnectionLimiter {
 - **Patterns**: Visitor pattern for query analysis, middleware integration
 
 #### Task 3.5.1: Write Security Tests First
-Test all security controls:
+Test all security controls.
+
+**📚 Junior Dev Resource**: Security is critical! Study the [GraphQL Security Best Practices](../../junior-dev-helper/graphql-security-best-practices.md) before implementing!
 ```rust
 #[cfg(test)]
 mod security_tests {
@@ -1791,13 +1810,21 @@ echo "=== All Phase 3 verification passed! ==="
 
 ## Common Issues and Solutions
 
+**📚 Junior Dev Resource**: Running into errors? The [Common GraphQL Errors](../../junior-dev-helper/graphql-common-errors.md) guide has detailed solutions!
+
 ### GraphQL Issues
 - **"Cannot return null for non-nullable field"**: Check resolver returns proper Option types
 - **Subscription not receiving events**: Verify EventBroadcaster is shared in context
 - **WebSocket connection drops**: Check connection limits and timeouts
+- **N+1 queries**: Implement DataLoader (see [DataLoader Guide](../../junior-dev-helper/dataloader-guide.md))
 
 ### Security Issues
 - **Depth limit not working**: Ensure extension is added to schema builder
+- **Complexity not calculated**: Check field complexity annotations
+
+### TDD Issues
+- **Tests passing too easily**: Ensure you see RED before GREEN
+- **Hard to test subscriptions**: See examples in [GraphQL TDD Examples](../../junior-dev-helper/graphql-tdd-examples.md)
 - **Complexity calculation wrong**: Review list size multipliers
 - **Introspection still enabled**: Check ENVIRONMENT variable is set
 
@@ -1813,6 +1840,22 @@ Phase 4 will implement Authorization & Authentication:
 - Session management
 - OAuth2/OIDC support
 - Permission caching
+
+---
+
+## Junior Developer Resource Summary
+
+New to GraphQL? Here's your learning path:
+
+1. **Start Here**: [GraphQL Tutorial](../../junior-dev-helper/graphql-tutorial.md) - Core concepts
+2. **Try It**: Run the [Interactive Tutorial](../../junior-dev-helper/interactive-examples/graphql-playground-tutorial.rs)
+3. **Learn TDD**: Study [GraphQL TDD Examples](../../junior-dev-helper/graphql-tdd-examples.md)
+4. **Avoid Pitfalls**: Read [Common GraphQL Errors](../../junior-dev-helper/graphql-common-errors.md)
+5. **Optimize**: Understand [DataLoader Guide](../../junior-dev-helper/dataloader-guide.md)
+6. **Real-time**: Master [WebSocket Subscriptions](../../junior-dev-helper/websocket-subscriptions-guide.md)
+7. **Secure It**: Apply [Security Best Practices](../../junior-dev-helper/graphql-security-best-practices.md)
+
+Remember: GraphQL is just a specification - the concepts transfer across languages!
 
 ---
 *This work plan follows the same structure and TDD practices as Phase 1 & 2, adapted specifically for GraphQL implementation requirements.*

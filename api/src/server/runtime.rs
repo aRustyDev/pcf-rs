@@ -11,6 +11,9 @@ use tracing::info;
 use crate::config::AppConfig;
 use crate::health::{handlers::{liveness_handler, readiness_handler}, HealthManager};
 use crate::logging::trace_requests;
+use crate::auth::components::AuthorizationComponents;
+use crate::observability::metrics_endpoint;
+use crate::middleware::metrics_middleware;
 
 /// Start the Axum HTTP server with health endpoints and graceful shutdown
 /// 
@@ -22,7 +25,7 @@ use crate::logging::trace_requests;
 /// 
 /// The server will bind to the address and port specified in the configuration
 /// and will handle graceful shutdown within the configured timeout period.
-pub async fn start_server(config: AppConfig) -> Result<()> {
+pub async fn start_server(config: AppConfig, _auth_components: AuthorizationComponents) -> Result<()> {
     info!("Starting PCF API server on {}:{}", config.server.bind, config.server.port);
     
     // Initialize health manager
@@ -63,6 +66,8 @@ pub async fn start_server(config: AppConfig) -> Result<()> {
 /// - CORS middleware for browser compatibility
 fn create_router(health_manager: HealthManager) -> Router {
     Router::new()
+        // Metrics endpoint (before other routes for priority)
+        .route("/metrics", get(metrics_endpoint))
         // Health check routes (per WORK_PLAN.md Task 1.6.1 and 1.6.2)
         .route("/health", get(liveness_handler))              // Simple liveness check
         .route("/health/liveness", get(liveness_handler))     // Keep existing for compatibility
@@ -70,6 +75,8 @@ fn create_router(health_manager: HealthManager) -> Router {
         .route("/health/readiness", get(readiness_handler))   // Keep existing for compatibility
         // Add health manager state
         .with_state(health_manager)
+        // Add metrics middleware to all routes
+        .layer(middleware::from_fn(metrics_middleware))
         // Add tracing middleware to all routes
         .layer(middleware::from_fn(trace_requests))
         // Add CORS middleware for browser requests

@@ -1,0 +1,264 @@
+name: MDBook Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'api/docs/**'
+      - '.github/workflows/mdbook.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'api/docs/**'
+      - '.github/workflows/mdbook.yml'
+  workflow_dispatch:
+
+env:
+  MDBOOK_VERSION: '0.4.40'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Cache MDBook and plugins
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin
+        key: ${{ runner.os }}-mdbook-${{ env.MDBOOK_VERSION }}-plugins-v2
+        restore-keys: |
+          ${{ runner.os }}-mdbook-${{ env.MDBOOK_VERSION }}-plugins-
+          ${{ runner.os }}-mdbook-
+
+    - name: Install MDBook
+      run: |
+        if ! mdbook --version | grep -q "$MDBOOK_VERSION"; then
+          cargo install --version $MDBOOK_VERSION mdbook
+        fi
+
+    - name: Install MDBook plugins
+      run: |
+        # Install all available plugins
+        cargo install mdbook-mermaid || true
+        cargo install mdbook-admonish || true
+        cargo install mdbook-toc || true
+        cargo install mdbook-linkcheck || true
+        cargo install mdbook-pagetoc || true
+        cargo install mdbook-katex || true
+        cargo install mdbook-open-on-gh || true
+        cargo install mdbook-variables || true
+        
+        # Setup admonish assets
+        cd api/docs
+        mdbook-admonish install
+
+    - name: Build documentation
+      run: |
+        cd api/docs
+        mdbook build
+
+    - name: Check for broken links
+      if: github.event_name == 'pull_request'
+      continue-on-error: true
+      run: |
+        cd api/docs
+        # Re-enable linkcheck for PR validation
+        sed -i 's/# \[preprocessor.linkcheck\]/[preprocessor.linkcheck]/' book.toml
+        sed -i 's/# command = "mdbook-linkcheck"/command = "mdbook-linkcheck"/' book.toml
+        sed -i 's/# \[output.linkcheck\]/[output.linkcheck]/' book.toml
+        sed -i 's/# follow-web-links/follow-web-links/' book.toml
+        sed -i 's/# traverse-parent-directories/traverse-parent-directories/' book.toml
+        sed -i 's/# warning-policy/warning-policy/' book.toml
+        mdbook build
+
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mdbook-documentation
+        path: api/docs/book/
+        retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: mdbook-documentation
+        path: ./book
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./book
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  pr-preview:
+    name: PR Preview Comment
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    
+    steps:
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: mdbook-documentation
+        path: ./book
+
+    - name: Deploy PR Preview
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./book
+        destination_dir: pr-${{ github.event.pull_request.number }}
+        keep_files: false
+
+    - name: Comment PR with preview link
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const prNumber = context.payload.pull_request.number;
+          const previewUrl = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-${prNumber}/`;
+          
+          const comment = `📚 **Documentation Preview Ready!**
+          
+          View the documentation preview at: ${previewUrl}
+          
+          This preview will be automatically updated with new commits.`;
+          
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && comment.body.includes('Documentation Preview Ready')
+          );
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment,
+            });
+          }
+
+  validate:
+    name: Validate Documentation
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: mdbook-documentation
+        path: ./book
+
+    - name: Validate HTML structure
+      run: |
+        # Check for basic HTML validity
+        find ./book -name "*.html" -type f | head -20 | while read -r file; do
+          if ! grep -q "<!DOCTYPE html>" "$file"; then
+            echo "❌ Missing DOCTYPE in $file"
+            exit 1
+          fi
+        done
+        echo "✅ HTML structure validation passed"
+
+    - name: Check for missing images
+      run: |
+        # Extract image references and check if files exist
+        missing_images=0
+        while IFS= read -r img; do
+          img_path="./book/$img"
+          if [[ ! -f "$img_path" ]]; then
+            echo "❌ Missing image: $img"
+            ((missing_images++))
+          fi
+        done < <(grep -h -o -E 'src="[^"]+\.(png|jpg|jpeg|gif|svg)"' ./book/*.html 2>/dev/null | sed 's/src="//;s/"//' | sort -u)
+        
+        if [[ $missing_images -gt 0 ]]; then
+          echo "❌ Found $missing_images missing images"
+          exit 1
+        else
+          echo "✅ All referenced images exist"
+        fi
+
+    - name: Check search index
+      run: |
+        if [[ ! -f "./book/searchindex.js" ]]; then
+          echo "❌ Search index not generated"
+          exit 1
+        fi
+        echo "✅ Search index exists"
+
+    - name: Validate plugin outputs
+      run: |
+        # Check if admonish CSS was copied
+        if [[ ! -f "./book/mdbook-admonish.css" ]]; then
+          echo "⚠️  Admonish CSS not found (plugin may not be installed)"
+        fi
+        
+        # Check if mermaid was initialized
+        if ! grep -q "mermaid.initialize" ./book/index.html 2>/dev/null; then
+          echo "⚠️  Mermaid initialization not found (plugin may not be installed)"
+        fi
+        
+        echo "✅ Plugin validation completed"

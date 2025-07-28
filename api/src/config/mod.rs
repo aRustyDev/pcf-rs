@@ -1,7 +1,9 @@
 pub mod models;
 pub mod validation;
+pub mod demo;
 
 pub use models::*;
+pub use demo::{DemoConfig, DemoFeatures};
 // Note: validation module exports will be used when server is implemented
 pub use validation::{load_config, Cli};
 

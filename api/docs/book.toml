@@ -1,0 +1,140 @@
+[book]
+title = "PCF API Documentation"
+authors = ["PCF Contributors"]
+description = "Comprehensive documentation for the PCF API"
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = true
+
+[preprocessor.index]
+enable = true
+
+[preprocessor.links]
+enable = true
+
+# Essential plugins (will be configured after installation)
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[preprocessor.admonish]
+command = "mdbook-admonish"
+assets_version = "3.1.0" # do not edit: managed by `mdbook-admonish install`
+
+[preprocessor.toc]
+command = "mdbook-toc"
+
+# Link checking - temporarily disabled until Phase 2 content is added
+# Will be re-enabled once content stabilizes
+# [preprocessor.linkcheck]
+# command = "mdbook-linkcheck"
+# 
+# [output.linkcheck]
+# follow-web-links = true
+# traverse-parent-directories = false
+# warning-policy = "warn"
+
+# Advanced plugins (will be configured after installation)
+[preprocessor.variables]
+command = "mdbook-variables"
+
+[preprocessor.variables.variables]
+api_version = "1.0.0"
+min_rust_version = "1.75"
+github_url = "https://github.com/aRustyDev/pcf-api"
+date = "2024-07-27"
+
+[preprocessor.katex]
+command = "mdbook-katex"
+
+[preprocessor.pagetoc]
+command = "mdbook-pagetoc"
+
+[preprocessor.open-on-gh]
+command = "mdbook-open-on-gh"
+repository = "https://github.com/aRustyDev/pcf-api"
+branch = "main"
+
+# Placeholder configurations for custom plugins
+# These will be uncommented when plugins are available
+# [preprocessor.auto-doc]
+# command = "mdbook-auto-doc"
+# renderer = ["html"]
+# [preprocessor.auto-doc.config]
+# source_dir = "../src"
+# output_dir = "developers/api-reference"
+# visibility = "public"
+# generate_index = true
+
+# [preprocessor.graphql-introspection]
+# command = "mdbook-graphql-introspection"
+# renderer = ["html"]
+# [preprocessor.graphql-introspection.config]
+# rust_source = "../src/graphql/schema.rs"
+# output_dir = "developers/graphql"
+# generate_examples = true
+# include_deprecated = true
+
+# [preprocessor.dependency-doc]
+# command = "mdbook-dependency-doc"
+# renderer = ["html"]
+# [preprocessor.dependency-doc.config]
+# cargo_toml = "../Cargo.toml"
+# dependencies_toml = "../dependencies.toml"
+# output_dir = "developers/dependencies"
+# require_rationale = true
+
+# [preprocessor.interactive-diagrams]
+# command = "mdbook-interactive-diagrams"
+# renderer = ["html"]
+# [preprocessor.interactive-diagrams.config]
+# enable_animations = true
+# default_collapsed = false
+
+# Existing plugin - glossary (not available in crates.io)
+# [preprocessor.glossary]
+# command = "mdbook-glossary"
+# renderer = ["html"]
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "navy"
+copy-fonts = true
+additional-css = ["theme/custom.css", "./mdbook-admonish.css"]
+additional-js = ["theme/custom.js"]
+git-repository-url = "https://github.com/aRustyDev/pcf-api"
+edit-url-template = "https://github.com/aRustyDev/pcf-api/edit/main/api/docs/{path}"
+site-url = "https://docs.pcf-api.org/"
+cname = "docs.pcf-api.org"
+input-404 = "404.md"
+fold.enable = true
+fold.level = 1
+
+[output.html.playground]
+editable = true
+copyable = true
+
+[output.html.search]
+enable = true
+limit-results = 20
+teaser-word-count = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 2
+
+[output.html.redirect]
+"/api/graphql.html" = "developer/api/graphql/README.html"
+"/deployment.html" = "admin/deployment/README.html"
+# Old path redirects for backwards compatibility
+"/administrators/overview.html" = "admin/README.html"
+"/developers/overview.html" = "developer/README.html"
+"/users/overview.html" = "user/README.html"
+
+# [output.epub]
+# enable = false

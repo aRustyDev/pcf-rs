@@ -5,8 +5,12 @@ use semver::{Version, VersionReq};
 use std::collections::HashMap;
 use thiserror::Error;
 
+pub mod adapter;
 pub mod connection;
+pub mod health;
 pub mod metrics;
+pub mod models;
+pub mod write_queue;
 
 /// Database health status
 #[derive(Debug, Clone, PartialEq)]
@@ -75,15 +79,19 @@ pub enum DatabaseError {
     
     #[error("Internal database error: {0}")]
     Internal(String),
+    
+    #[error("Database service unavailable - retry after {retry_after} seconds")]
+    ServiceUnavailable { retry_after: u64 },
 }
 
 lazy_static! {
-    static ref SUPPORTED_VERSIONS: VersionReq = VersionReq::parse(">=1.0.0, <2.0.0")
+    static ref SUPPORTED_VERSIONS: VersionReq = VersionReq::parse(">=1.0.0, <3.0.0")
         .expect("Valid version requirement - compile time constant");
     static ref TESTED_VERSIONS: Vec<Version> = vec![
         Version::parse("1.0.0").expect("Valid version - compile time constant"),
         Version::parse("1.1.0").expect("Valid version - compile time constant"),
         Version::parse("1.2.0").expect("Valid version - compile time constant"),
+        Version::parse("2.0.0").expect("Valid version - compile time constant"),
     ];
 }
 
@@ -234,8 +242,22 @@ impl DatabaseService for MockDatabase {
         Ok("test-id".to_string())
     }
     
-    async fn read(&self, _collection: &str, _id: &str) -> Result<Option<Value>, DatabaseError> {
-        Ok(Some(Value::Object(serde_json::Map::new())))
+    async fn read(&self, collection: &str, id: &str) -> Result<Option<Value>, DatabaseError> {
+        if collection == "notes" && id.starts_with("notes:") {
+            // Return a mock note for testing
+            let note_data = serde_json::json!({
+                "id": id,
+                "title": "Test Note",
+                "content": "Test content",
+                "author": "test_user",
+                "created_at": "2023-01-01T00:00:00Z",
+                "updated_at": "2023-01-01T00:00:00Z",
+                "tags": ["test"]
+            });
+            Ok(Some(note_data))
+        } else {
+            Ok(None)
+        }
     }
     
     async fn update(&self, _collection: &str, _id: &str, _data: Value) -> Result<(), DatabaseError> {
@@ -292,7 +314,7 @@ mod tests {
         
         // Test incompatible versions
         assert!(matches!(checker.check_version("0.9.0"), VersionCompatibility::Incompatible(_)));
-        assert!(matches!(checker.check_version("2.0.0"), VersionCompatibility::Incompatible(_)));
+        assert!(matches!(checker.check_version("3.0.0"), VersionCompatibility::Incompatible(_)));
     }
     
     #[tokio::test]

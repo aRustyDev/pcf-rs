@@ -330,3 +330,23 @@ Comprehensive testing strategy ensuring reliability and maintainability.
 - Health check state transitions
 - Error handling and propagation
 - GraphQL schema compliance
+
+## Documentation
+
+Comprehensive documentation for the API is provided using MDBook, serving three primary audiences: Developers, Administrators, and API Users.
+
+**Documentation Specification**: See [MDBook Documentation Specification](.spec/mdbook-documentation.md) for complete details.
+
+**Key Features**:
+- Self-contained documentation with source code links
+- Interactive GraphQL playground and architecture diagrams  
+- Auto-generated API documentation from code
+- Quality-assured with automated checks
+- Version-aware content management
+
+**Documentation Structure**:
+- Developer guides with per-module documentation
+- Administrator deployment and configuration guides
+- API user authentication and usage documentation
+- Interactive examples and troubleshooting guides
+- Performance benchmarks and analysis

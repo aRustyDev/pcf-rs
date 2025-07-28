@@ -4,18 +4,34 @@
 
 This document provides comprehensive guidance for agents conducting reviews at Phase 6 checkpoints. As a reviewing agent, you are responsible for ensuring the performance optimizations meet all specifications, achieve target metrics, and maintain code quality.
 
+## MANDATORY Review Scope
+
+**IMPORTANT**: You MUST limit your review to:
+1. The current checkpoint being reviewed
+2. Any previously completed checkpoints in this phase
+3. Do NOT review or comment on future checkpoints
+
+This ensures focused, relevant feedback without overwhelming the implementation agent.
+
 ## Your Responsibilities as Reviewer
 
-1. **Thoroughly examine all provided artifacts**
-2. **Run performance benchmarks and verify results**
-3. **Test N+1 query prevention with specific scenarios**
-4. **Verify cache hit rates and isolation**
-5. **Test timeout cascade behavior**
-6. **Run load tests at target RPS**
-7. **Profile for performance bottlenecks**
-8. **Verify TDD practices were followed**
-9. **Provide explicit feedback on findings**
-10. **Give clear approval or rejection**
+1. **First, check for questions** in `api/.claude/.reviews/checkpoint-X-questions.md` and answer them in the same file
+2. **Thoroughly examine all provided artifacts**
+3. **Run performance benchmarks and verify results**
+4. **Test N+1 query prevention with specific scenarios**
+5. **Verify cache hit rates and isolation**
+6. **Test timeout cascade behavior**
+7. **Run load tests at target RPS**
+8. **Profile for performance bottlenecks**
+9. **Verify TDD practices were followed** (or documented exceptions for spikes)
+10. **Check code documentation and comments** are comprehensive
+11. **Look for code cleanliness** - no leftover stubs, TODOs, or test artifacts
+12. **Verify junior dev resources were used** and check if they were helpful
+13. **Write feedback** to `api/.claude/.reviews/checkpoint-X-feedback.md`
+14. **Document your review process** in `api/.claude/.reviews/checkpoint-X-review-vY.md` (where Y is version number)
+15. **Give clear approval, conditional approval, or rejection**
+
+**Time Limits**: If unable to complete full review within 24 hours, provide preliminary feedback with timeline for completion.
 
 ## Core Review Principles
 
@@ -49,35 +65,53 @@ Continue verifying TDD practices:
 2. **Performance tests comprehensive** - Load, stress, spike tests
 3. **Benchmarks established** - Baseline measurements
 4. **Edge cases covered** - Timeout scenarios, cache misses
+5. **Code well documented** - All public functions have rustdoc comments
+6. **Clean implementation** - No commented out code, test stubs, or TODO comments
+7. **Junior resources utilized** - Evidence of consulting provided guides
+
+## Junior Developer Resources
+
+Direct the implementing agent to these guides when you find issues:
+- **[DataLoader N+1 Tutorial](../../junior-dev-helper/dataloader-n1-tutorial.md)** - For N+1 query problems
+- **[Caching Strategies Guide](../../junior-dev-helper/caching-strategies-guide.md)** - For cache isolation issues
+- **[Performance Testing Tutorial](../../junior-dev-helper/performance-testing-tutorial.md)** - For inadequate load tests
+- **[Performance Optimization Errors](../../junior-dev-helper/performance-optimization-errors.md)** - For common mistakes
+- **[Timeout Management Guide](../../junior-dev-helper/timeout-management-guide.md)** - For timeout hierarchy issues
 
 ## Review Process
 
 For each checkpoint review:
 
-1. **Receive from implementing agent**:
+1. **Check for questions**: Read `api/.claude/.reviews/checkpoint-X-questions.md` and provide answers
+
+2. **Receive from implementing agent**:
    - Link to Phase 6 REVIEW_PLAN.md
    - Link to Phase 6 WORK_PLAN.md
    - Specific checkpoint number
    - All artifacts listed for that checkpoint
    - Performance test results
 
-2. **Perform the review** using checkpoint-specific checklist
+3. **Perform the review** using checkpoint-specific checklist
 
-3. **Run performance verification**:
+4. **Run performance verification**:
    - Execute benchmarks
    - Run load tests
    - Check query patterns
    - Measure cache effectiveness
 
-4. **Document your findings** in structured format
+5. **Document your findings**:
+   - Write feedback to `api/.claude/.reviews/checkpoint-X-feedback.md`
+   - Save your review notes to `api/.claude/.reviews/checkpoint-X-review-vY.md`
 
-5. **Provide clear decision**: APPROVED or CHANGES REQUIRED
+6. **Provide clear decision**: APPROVED or CHANGES REQUIRED
+
+7. **Stop and wait** for the implementing agent to address feedback before continuing
 
 ## Checkpoint-Specific Review Guidelines
 
 ### 🛑 CHECKPOINT 1: DataLoader Implementation Review
 
-**What You're Reviewing**: N+1 query prevention with DataLoader
+**What You're Reviewing**: N+1 query prevention with DataLoader (DO NOT review future checkpoints)
 
 **Key Specifications to Verify**:
 - DataLoader trait implemented correctly
@@ -85,6 +119,9 @@ For each checkpoint review:
 - Request-scoped caching functional
 - GraphQL context integration complete
 - No N+1 queries in tests
+- Code properly documented with rustdoc
+- No leftover TODO comments or test stubs
+- Evidence of using [DataLoader N+1 Tutorial](../../junior-dev-helper/dataloader-n1-tutorial.md)
 
 **Required Tests**:
 ```bash
@@ -149,10 +186,12 @@ curl http://localhost:8080/metrics | grep -E "dataloader_batch_size|dataloader_l
 
 ### N+1 Prevention
 Tested Relationships:
-- [ ] User -> Notes: [PREVENTED/STILL OCCURS]
-- [ ] Note -> Author: [PREVENTED/STILL OCCURS]
-- [ ] Note -> Tags: [PREVENTED/STILL OCCURS]
+- [ ] User -> Notes: [PREVENTED/STILL OCCURS/PARTIAL]
+- [ ] Note -> Author: [PREVENTED/STILL OCCURS/PARTIAL]
+- [ ] Note -> Tags: [PREVENTED/STILL OCCURS/PARTIAL]
 - [ ] Custom relationships: [List any additional]
+
+**For PARTIAL**: Explain which cases work and which don't
 
 Query Analysis:
 - [ ] Database query count for 100 users with notes: ___ (should be < 10)
@@ -183,10 +222,32 @@ Query Analysis:
 - [ ] Edge cases covered: [YES/NO]
 - [ ] Performance benchmarks: [YES/NO]
 
+### Code Quality
+- [ ] All public functions have rustdoc comments: [YES/NO]
+- [ ] No TODO comments remaining: [YES/NO]
+- [ ] No commented out code: [YES/NO]
+- [ ] No test stubs or debug prints: [YES/NO]
+
+### Junior Developer Resources
+- [ ] Evidence of consulting DataLoader tutorial: [YES/NO]
+- [ ] Tutorial adequately covered the topic: [YES/NO]
+- [ ] Any gaps in the tutorial: [List topics that should be added]
+
 ### Issues Found
 [List with query examples showing problems]
 
-### Decision: [APPROVED / CHANGES REQUIRED]
+### Decision: [APPROVED / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
+
+[If APPROVED WITH CONDITIONS]
+The implementing agent may proceed with the following conditions:
+1. [Specific condition that must be met]
+2. [Minor issues to address in next checkpoint]
+3. Document completion in `api/.claude/.reviews/checkpoint-1-conditions-met.md`
+
+### Required Files to Create
+- [ ] Created `api/.claude/.reviews/checkpoint-1-feedback.md`
+- [ ] Created `api/.claude/.reviews/checkpoint-1-review-v1.md`
+- [ ] Answered questions in `api/.claude/.reviews/checkpoint-1-questions.md` (if any)
 ```
 
 ### 🛑 CHECKPOINT 2: Response Caching Review
@@ -407,7 +468,7 @@ Error Responses:
 ### Issues Found
 [Examples of timeout failures or hangs]
 
-### Decision: [APPROVED / CHANGES REQUIRED]
+### Decision: [APPROVED / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
 ```
 
 ### 🛑 CHECKPOINT 4: Complete Phase 6 System Review
@@ -511,6 +572,10 @@ Under Load:
 - [ ] Memory usage: ___MB (should be stable)
 - [ ] Connection pool usage: ___% 
 - [ ] File descriptors: ___ (well below limit)
+- [ ] Connection retry behavior verified: [YES/NO]
+  - [ ] Initial retry: 1s [YES/NO]
+  - [ ] Exponential backoff: [YES/NO]
+  - [ ] Max retry interval: 60s [YES/NO]
 
 Scaling Behavior:
 - [ ] Performance scales with CPU cores: [YES/NO]
@@ -542,6 +607,8 @@ Verified Patterns:
 - [ ] SLO alerts configured: [YES/NO]
 - [ ] Runbooks documented: [YES/NO]
 - [ ] Metrics exported: [YES/NO]
+- [ ] Metric cardinality < 1000 per name: [YES/NO]
+  - [ ] If NO, list problematic metrics: ___________
 
 ### Documentation Review
 - [ ] Performance tuning guide: [YES/NO]
@@ -555,7 +622,7 @@ Verified Patterns:
 ### Performance Recommendations
 [Suggestions for future optimization]
 
-### Decision: [APPROVED FOR PHASE 7 / CHANGES REQUIRED]
+### Decision: [APPROVED FOR PHASE 7 / APPROVED WITH CONDITIONS / CHANGES REQUIRED]
 
 ### Sign-off
 Reviewed by: [Agent/Human Name]
@@ -633,8 +700,42 @@ Critical performance tests to run:
 
 4. **N+1 Detection**
    ```bash
-   # Enable query logging
-   # Count queries for relationship loading
+   # Enable query logging in your database
+   export DATABASE_LOG_QUERIES=true
+   
+   # Run test with relationships
+   curl -X POST http://localhost:8080/graphql \
+     -H "Content-Type: application/json" \
+     -d '{"query":"{ users(first: 10) { notes { author { name } } } }"}' \
+     2>&1 | tee query.log
+   
+   # Count unique queries (should be ~3, not 30+)
+   grep "SELECT" query.log | sort | uniq | wc -l
+   ```
+
+5. **Metric Cardinality Verification**
+   ```bash
+   # Check cardinality per metric
+   for metric in $(curl -s http://localhost:8080/metrics | grep -E "^graphql_" | cut -d'{' -f1 | sort | uniq); do
+     count=$(curl -s http://localhost:8080/metrics | grep "^$metric" | wc -l)
+     echo "$metric: $count labels"
+     if [ $count -gt 1000 ]; then
+       echo "  WARNING: Exceeds cardinality limit!"
+     fi
+   done
+   ```
+
+6. **Connection Pool Health Check**
+   ```bash
+   # Monitor pool metrics during load
+   watch -n 1 'curl -s http://localhost:8080/metrics | grep -E "db_pool_|db_connection_retries"'
+   
+   # Simulate connection failures
+   docker stop postgres_container
+   sleep 5
+   docker start postgres_container
+   
+   # Verify retry behavior matches SPEC.md (1s, 2s, 4s, ... up to 60s)
    ```
 
 ## Final Review Checklist
@@ -690,6 +791,80 @@ The implementing agent must:
 
 [If APPROVED]
 The implementing agent may proceed to [next checkpoint/phase].
+```
+
+## Feedback File Template
+
+When creating `api/.claude/.reviews/checkpoint-X-feedback.md`:
+
+```markdown
+# Checkpoint X Feedback
+
+## Overall Assessment
+[Brief summary of the checkpoint implementation quality]
+
+## Strengths
+- [What was done well]
+- [Good practices observed]
+
+## Issues Requiring Attention
+### High Priority
+1. [Critical issue with specific location and suggested fix]
+
+### Medium Priority
+1. [Important but not blocking issue]
+
+### Low Priority
+1. [Nice to have improvements]
+
+## Code Quality Observations
+- Documentation: [Adequate/Needs improvement]
+- Test Coverage: [Comprehensive/Gaps noted]
+- Code Cleanliness: [Clean/Issues found]
+
+## Junior Developer Resources Assessment
+- Resources Used: [List which guides were consulted]
+- Effectiveness: [How helpful were they]
+- Gaps Identified: [What additional guidance would help]
+
+## Recommendations
+1. [Specific actionable recommendations]
+
+## Questions Answered
+[If any questions were in checkpoint-X-questions.md, note that you answered them]
+```
+
+## Review Notes File Template
+
+When creating `api/.claude/.reviews/checkpoint-X-review-vY.md`:
+
+```markdown
+# Checkpoint X Review Notes - Version Y
+
+## Review Process
+1. [Step-by-step what you reviewed]
+2. [Tests you ran]
+3. [Metrics you collected]
+
+## Test Results
+### Performance Tests
+- [Specific test]: [Result]
+
+### Code Analysis
+- Lines of code reviewed: ___
+- Test coverage: ___%
+- Cyclomatic complexity: ___
+
+## Time Spent
+- Code review: ___ minutes
+- Testing: ___ minutes
+- Documentation: ___ minutes
+
+## Tools Used
+- [List any tools, scripts, or commands used]
+
+## Raw Test Output
+[Include relevant test output for future reference]
 ```
 
 Remember: Performance is critical for user experience. Be thorough in testing all optimization paths and ensuring targets are met under realistic load.

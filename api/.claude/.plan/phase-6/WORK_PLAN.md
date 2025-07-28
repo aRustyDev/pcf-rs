@@ -25,10 +25,27 @@ Key specifications in `/api/.claude/.spec/`:
 - **[ROADMAP.md](../../ROADMAP.md)** - Phase 6 objectives (lines 156-183)
 - **[graphql-schema.md](../../.spec/graphql-schema.md)** - Query complexity limits
 
+### Junior Developer Resources
+Comprehensive guides in `/api/.claude/junior-dev-helper/`:
+- **[DataLoader N+1 Tutorial](../../junior-dev-helper/dataloader-n1-tutorial.md)** - Understanding and solving N+1 queries
+- **[DataLoader Guide](../../junior-dev-helper/dataloader-guide.md)** - Complete DataLoader implementation patterns
+- **[Response Caching Guide](../../junior-dev-helper/response-caching-guide.md)** - Response caching with user isolation
+- **[Performance Testing Tutorial](../../junior-dev-helper/performance-testing-tutorial.md)** - Load testing and benchmarking
+- **[Performance Optimization Errors](../../junior-dev-helper/performance-optimization-errors.md)** - Common mistakes and fixes
+- **[Timeout Management Guide](../../junior-dev-helper/timeout-management-guide.md)** - Hierarchical timeout implementation
+- **[Cardinality Control Guide](../../junior-dev-helper/cardinality-control-guide.md)** - Managing metric cardinality limits
+- **[Connection Pool Guide](../../junior-dev-helper/connection-pool-guide.md)** - Database connection optimization
+- **[Retry Patterns Guide](../../junior-dev-helper/retry-patterns-guide.md)** - Resilient retry strategies
+
 ### Quick Links
-- **Verification Script**: `scripts/verify-phase-6.sh` (to be created)
-- **Load Test Suite**: `scripts/load-test.sh` (to be created)
-- **Performance Profile**: `scripts/profile.sh` (to be created)
+- **Verification Script**: `scripts/verify-phase-6.sh` (create using examples from Phase 1-5)
+- **Load Test Suite**: `scripts/load-test.sh` (adapt from performance-testing-tutorial.md)
+- **Performance Profile**: `scripts/profile.sh` (use standard Rust profiling tools)
+
+**If scripts don't exist**: 
+1. Create based on similar scripts from previous phases
+2. Use manual commands documented in the guides
+3. Document what you did in `api/.claude/.reviews/phase-6-tooling.md`
 
 ## Overview
 This work plan implements comprehensive performance optimizations focusing on N+1 query prevention, intelligent caching, and proper timeout management. The goal is to achieve sub-200ms P99 latency at 1000 RPS. Each checkpoint represents a natural boundary for review.
@@ -49,40 +66,54 @@ Always use these commands instead of direct cargo commands to ensure consistency
 **This plan includes 4 mandatory review checkpoints where work MUST stop for external review.**
 
 At each checkpoint:
-1. **STOP all work** and commit your code
-2. **Request external review** by providing:
+1. **STOP work on the current section** and commit your code
+2. **Write any questions** you have to `api/.claude/.reviews/checkpoint-X-questions.md` (where X is the checkpoint number)
+3. **Request external review** by providing:
    - This WORK_PLAN.md file
    - The REVIEW_PLAN.md file  
    - The checkpoint number
    - All code and artifacts created
-3. **Wait for approval** before continuing to next section
+4. **Wait for approval** before continuing to next section
+   - **If no response within 24 hours**: Document your plan in `api/.claude/.reviews/checkpoint-X-self-review.md` and proceed cautiously
+   - **If blocked over 48 hours**: Escalate in `api/.claude/.reviews/phase-6-blockers.md` and continue with non-dependent sections
+5. **If you wrote questions**, wait for answers to be provided in the same questions file before proceeding
+   - **If no answers within 24 hours**: Document your assumptions and proceed with best judgment
 
 ## Development Methodology: Test-Driven Development (TDD)
 
 **IMPORTANT**: Continue following TDD practices from previous phases:
 1. **Write tests FIRST** - Before any implementation
+   - **Exception**: Exploratory spikes allowed if followed immediately by tests
+   - **Document** any prototype code that helped inform the test design
 2. **Run tests to see them FAIL** - Confirms test is valid
 3. **Write minimal code to make tests PASS** - No more than necessary
 4. **REFACTOR** - Clean up while keeping tests green
 5. **Document as you go** - Add rustdoc comments and inline explanations
 
+**Note**: If you need to explore an approach before writing tests, timebox to 30 minutes and immediately backfill tests for any code you keep.
+
 ## Done Criteria Checklist
 - [ ] No N+1 queries detected in tests
-- [ ] P99 response times under 200ms
+- [ ] P99 response times under 200ms (at 1000 RPS load on 4-core test environment)
 - [ ] Timeouts cascade properly without hanging
-- [ ] Cache hit rate > 50% for common queries
-- [ ] Load tests pass at 1000 RPS
-- [ ] Memory usage stable under load
-- [ ] CPU usage scales linearly
-- [ ] All code has corresponding tests written first
+- [ ] Cache hit rate > 50% for common queries (measured after 5-minute warmup)
+- [ ] Load tests pass at 1000 RPS (99% success rate over 5 minutes)
+- [ ] Memory usage stable under load (less than 10% growth over 1 hour)
+- [ ] CPU usage scales linearly (R² > 0.9)
+- [ ] All code has corresponding tests written first (spikes immediately backfilled)
+
+**Note**: Document any criteria not met with explanation and remediation plan in `api/.claude/.reviews/phase-6-exceptions.md`
 
 ## Work Breakdown with Review Checkpoints
 
 ### 6.1 DataLoader Implementation (3-4 work units)
 
+**Work Unit Definition**: 1 work unit ≈ 4-6 hours of focused development time
+
 **Work Unit Context:**
 - **Complexity**: High - Complex async batching and caching
 - **Scope**: ~1000 lines across 8-10 files
+- **Time Estimate**: 12-24 hours total
 - **Key Components**: 
   - DataLoader trait and implementation (~300 lines)
   - Batch loading logic (~200 lines)
@@ -93,6 +124,9 @@ At each checkpoint:
 - **Patterns**: Async batching, request-scoped caching, lazy loading
 
 #### Task 6.1.1: Write DataLoader Tests First
+
+**💡 Junior Dev Tip**: Start by reading the [DataLoader N+1 Tutorial](../../junior-dev-helper/dataloader-n1-tutorial.md) to understand why we need DataLoader and how it prevents N+1 queries.
+
 Create `src/performance/dataloader.rs` with comprehensive test module:
 ```rust
 #[cfg(test)]
@@ -255,9 +289,16 @@ async fn notes(&self, ctx: &Context<'_>) -> Result<Vec<Note>> {
 - Integration with GraphQL context
 - N+1 query prevention verified
 
+**Verification**:
+- Run `scripts/verify-phase-6.sh checkpoint1` if available
+- Otherwise, manually verify each deliverable and document in review request
+- Include performance metrics from your local testing
+
 ---
 
 ### 6.2 Response Caching (2-3 work units)
+
+**Work Unit Definition**: 1 work unit ≈ 4-6 hours of focused development time
 
 **Work Unit Context:**
 - **Complexity**: Medium - Cache key generation and invalidation
@@ -271,6 +312,9 @@ async fn notes(&self, ctx: &Context<'_>) -> Result<Vec<Note>> {
 - **Patterns**: Query fingerprinting, user isolation, smart invalidation
 
 #### Task 6.2.1: Write Response Cache Tests
+
+**🔐 Security Alert**: Before implementing caching, review the [Caching Strategies Guide](../../junior-dev-helper/caching-strategies-guide.md) to understand cache isolation and security requirements. Never share cached data between users!
+
 Create comprehensive caching tests:
 ```rust
 #[cfg(test)]
@@ -415,9 +459,16 @@ impl CacheInvalidator {
 - Intelligent invalidation
 - Cache metrics tracking
 
+**Verification**:
+- Test cache isolation between users
+- Verify hit rates meet targets
+- Check memory usage is bounded
+
 ---
 
 ### 6.3 Timeout Hierarchy (2-3 work units)
+
+**Work Unit Definition**: 1 work unit ≈ 4-6 hours of focused development time
 
 **Work Unit Context:**
 - **Complexity**: Medium - Cascading timeout management
@@ -431,6 +482,9 @@ impl CacheInvalidator {
 - **Patterns**: Context deadlines, timeout budgets, graceful cancellation
 
 #### Task 6.3.1: Write Timeout Tests
+
+**⏱️ Timing is Critical**: Read the [Timeout Management Guide](../../junior-dev-helper/timeout-management-guide.md) to understand why proper timeout hierarchy prevents hanging requests and cascading failures.
+
 Create timeout behavior tests:
 ```rust
 #[cfg(test)]
@@ -572,9 +626,16 @@ impl DatabaseService {
 - No hanging requests
 - Clear timeout errors
 
+**Verification**:
+- Test cascade behavior under load
+- Verify no resource leaks on timeout
+- Check error messages are helpful
+
 ---
 
 ### 6.4 Performance Testing & Optimization (2-3 work units)
+
+**Work Unit Definition**: 1 work unit ≈ 4-6 hours of focused development time
 
 **Work Unit Context:**
 - **Complexity**: High - Load testing and profiling
@@ -588,6 +649,9 @@ impl DatabaseService {
 - **Patterns**: Realistic load patterns, profiling integration, bottleneck identification
 
 #### Task 6.4.1: Create Load Test Suite
+
+**📊 Performance Testing**: Study the [Performance Testing Tutorial](../../junior-dev-helper/performance-testing-tutorial.md) to learn how to create realistic load tests. Also check [Performance Optimization Errors](../../junior-dev-helper/performance-optimization-errors.md) for common pitfalls.
+
 Build comprehensive load testing:
 ```rust
 #[cfg(test)]
@@ -629,6 +693,128 @@ mod load_tests {
     }
 }
 ```
+
+**Create Load Test Scripts**:
+
+Create `scripts/load-test.sh` with this content:
+```bash
+#!/bin/bash
+# Phase 6 Load Testing Script
+
+RPS=${1:-1000}
+DURATION=${2:-300}
+ENDPOINT=${3:-"http://localhost:8080/graphql"}
+
+echo "Starting load test: ${RPS} RPS for ${DURATION}s"
+
+# Using vegeta (install: go install github.com/tsenart/vegeta@latest)
+cat > queries.jsonl << EOF
+{"query": "{ users(first: 20) { id name } }", "variables": {}}
+{"query": "{ notes(first: 10) { id title author { name } } }", "variables": {}}
+{"query": "{ user(id: \"1\") { notes { id title tags { name } } } }", "variables": {}}
+EOF
+
+# Generate load
+vegeta attack -format=json \
+  -rate=${RPS} \
+  -duration=${DURATION}s \
+  -targets=queries.jsonl \
+  -header="Content-Type: application/json" \
+  -output=results.bin
+
+# Analyze results
+vegeta report -type=text results.bin
+vegeta plot results.bin > results.html
+
+# Check if we met SLOs
+P99=$(vegeta report -type=json results.bin | jq '.latencies.p99 / 1000000')
+SUCCESS_RATE=$(vegeta report -type=json results.bin | jq '.success')
+
+if (( $(echo "$P99 < 200" | bc -l) )) && (( $(echo "$SUCCESS_RATE > 0.99" | bc -l) )); then
+    echo "✅ PASSED: P99=${P99}ms, Success=${SUCCESS_RATE}"
+    exit 0
+else
+    echo "❌ FAILED: P99=${P99}ms, Success=${SUCCESS_RATE}"
+    exit 1
+fi
+```
+
+Alternative using k6 (install: https://k6.io/docs/getting-started/installation):
+```javascript
+// scripts/k6-load-test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export let options = {
+    stages: [
+        { duration: '30s', target: 100 },  // Ramp up
+        { duration: '5m', target: 1000 },  // Stay at 1000 RPS
+        { duration: '30s', target: 0 },    // Ramp down
+    ],
+    thresholds: {
+        http_req_duration: ['p(99)<200'], // P99 under 200ms
+        http_req_failed: ['rate<0.01'],   // Error rate under 1%
+    },
+};
+
+const queries = [
+    {
+        name: 'userList',
+        query: '{ users(first: 20) { id name } }',
+        weight: 0.3,
+    },
+    {
+        name: 'noteDetail', 
+        query: '{ note(id: "1") { id title author { name } } }',
+        weight: 0.4,
+    },
+    {
+        name: 'userNotes',
+        query: '{ user(id: "1") { notes { id title } } }',
+        weight: 0.3,
+    },
+];
+
+export default function() {
+    // Select query based on weight
+    const query = selectWeighted(queries);
+    
+    const payload = JSON.stringify({
+        query: query.query,
+        variables: {},
+    });
+    
+    const params = {
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer test-token',
+        },
+        tags: { name: query.name },
+    };
+    
+    const res = http.post('http://localhost:8080/graphql', payload, params);
+    
+    check(res, {
+        'status is 200': (r) => r.status === 200,
+        'no errors': (r) => !r.json('errors'),
+        'has data': (r) => r.json('data') !== null,
+    });
+    
+    sleep(0.1); // Think time
+}
+
+function selectWeighted(items) {
+    const random = Math.random();
+    let sum = 0;
+    for (const item of items) {
+        sum += item.weight;
+        if (random <= sum) return item;
+    }
+    return items[0];
+}
+```
+
+Run with: `k6 run scripts/k6-load-test.js`
 
 #### Task 6.4.2: Implement Performance Optimizations
 Apply discovered optimizations:
@@ -702,21 +888,31 @@ impl PerformanceMonitor {
 - No N+1 queries detected
 - Cache hit rate > 50%
 
+**Final Verification**:
+- Run complete performance test suite
+- Profile under sustained load
+- Document any remaining optimization opportunities
+
 ---
 
 ## Common Troubleshooting
 
+**📚 First Stop**: Check the [Performance Optimization Errors](../../junior-dev-helper/performance-optimization-errors.md) guide for detailed solutions to these and other common issues.
+
 ### Issue: N+1 queries still occurring
-**Solution**: Check DataLoader is used in all resolver relationships
+**Solution**: 
+1. Check DataLoader is used in all resolver relationships
+2. See [DataLoader N+1 Tutorial](../../junior-dev-helper/dataloader-n1-tutorial.md) section on "Testing for N+1 Queries"
+3. If tutorial doesn't cover your case, document the pattern and solution in `api/.claude/.reviews/phase-6-patterns.md`
 
 ### Issue: Cache hit rate too low
-**Solution**: Analyze query patterns, adjust TTLs, implement cache warming
+**Solution**: Analyze query patterns, adjust TTLs, implement cache warming. Review [Caching Strategies Guide](../../junior-dev-helper/caching-strategies-guide.md) section on "Monitoring Cache Performance".
 
 ### Issue: Timeouts not cascading properly
-**Solution**: Verify TimeoutContext propagation through all layers
+**Solution**: Verify TimeoutContext propagation through all layers. See [Timeout Management Guide](../../junior-dev-helper/timeout-management-guide.md) section on "The Timeout Hierarchy".
 
 ### Issue: Load test failures
-**Solution**: Profile bottlenecks, tune connection pools, optimize queries
+**Solution**: Profile bottlenecks, tune connection pools, optimize queries. Consult [Performance Testing Tutorial](../../junior-dev-helper/performance-testing-tutorial.md) for debugging techniques.
 
 ## Performance Considerations
 

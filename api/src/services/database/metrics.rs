@@ -124,6 +124,12 @@ pub mod feature_metrics {
         DATABASE_METRICS.increment_connection_errors();
     }
     
+    pub fn increment_operations(_collection: &str, _operation: &str) {
+        // Placeholder for operation counting
+        // In a real implementation, this would increment counters by collection and operation type
+        DATABASE_METRICS.increment_query_count();
+    }
+    
     /// Get a snapshot of current metrics
     pub fn get_metrics_snapshot() -> MetricsSnapshot {
         MetricsSnapshot {
@@ -148,6 +154,7 @@ pub mod feature_metrics {
     pub fn increment_failed_connections() {}
     pub fn increment_query_count() {}
     pub fn increment_connection_errors() {}
+    pub fn increment_operations(_collection: &str, _operation: &str) {}
     
     pub fn get_metrics_snapshot() -> MetricsSnapshot {
         MetricsSnapshot {
