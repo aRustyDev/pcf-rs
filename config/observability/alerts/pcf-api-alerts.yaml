@@ -1,0 +1,344 @@
+groups:
+  - name: pcf-api-alerts
+    interval: 30s
+    rules:
+      # High Error Rate Alert
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(graphql_request_total{status="error"}[5m])) /
+            sum(rate(graphql_request_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: graphql
+        annotations:
+          summary: "PCF API GraphQL error rate is above 5%"
+          description: |
+            The GraphQL error rate has been above 5% for more than 5 minutes.
+            Current error rate: {{ $value | humanizePercentage }}
+            
+            This indicates potential issues with:
+            - Database connectivity
+            - Authorization service
+            - Invalid client requests
+            - Application bugs
+            
+            Runbook: https://docs.pcf.example.com/runbooks/high-error-rate
+          dashboard: "https://grafana.example.com/d/pcf-api-overview"
+
+      # Critical Error Rate Alert
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(graphql_request_total{status="error"}[5m])) /
+            sum(rate(graphql_request_total[5m]))
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+          service: pcf-api
+          component: graphql
+        annotations:
+          summary: "CRITICAL: PCF API GraphQL error rate is above 20%"
+          description: |
+            The GraphQL error rate has been above 20% for more than 2 minutes.
+            Current error rate: {{ $value | humanizePercentage }}
+            
+            This is a critical service degradation. Immediate action required.
+            
+            Escalation: On-call engineer
+            Runbook: https://docs.pcf.example.com/runbooks/critical-error-rate
+
+      # High Cardinality Alert
+      - alert: HighCardinality
+        expr: count(count by (operation)(graphql_request_total)) > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: metrics
+        annotations:
+          summary: "Too many unique operations being tracked in metrics"
+          description: |
+            The number of unique GraphQL operations has exceeded the cardinality limit.
+            Current unique operations: {{ $value }}
+            Limit: 50
+            
+            This can cause:
+            - Increased memory usage in Prometheus
+            - Query performance degradation
+            - Potential out-of-memory conditions
+            
+            Action required:
+            1. Review operation naming patterns
+            2. Check for dynamic operation names
+            3. Verify cardinality limiter is working
+            
+            Runbook: https://docs.pcf.example.com/runbooks/high-cardinality
+
+      # High Response Time Alert
+      - alert: HighResponseTime
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(graphql_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 10m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: performance
+        annotations:
+          summary: "PCF API P95 response time is above 1 second"
+          description: |
+            The P95 response time has been above 1 second for more than 10 minutes.
+            Current P95: {{ $value }}s
+            
+            This may indicate:
+            - Database performance issues
+            - N+1 query problems
+            - Inefficient GraphQL resolvers
+            - Resource constraints
+            
+            Runbook: https://docs.pcf.example.com/runbooks/high-response-time
+
+      # Service Down Alert
+      - alert: ServiceDown
+        expr: up{job="pcf-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: pcf-api
+          component: availability
+        annotations:
+          summary: "PCF API service is down"
+          description: |
+            The PCF API service has been unreachable for more than 1 minute.
+            
+            This is a critical service outage.
+            
+            Immediate actions:
+            1. Check service health endpoints
+            2. Review application logs
+            3. Verify infrastructure status
+            4. Consider rolling back recent deployments
+            
+            Escalation: On-call engineer immediately
+
+      # Database Connection Issues
+      - alert: DatabaseConnectionIssues
+        expr: |
+          sum(rate(graphql_request_total{status="error"}[5m])) by (operation) > 0.1
+          and
+          sum(rate(graphql_request_duration_seconds_sum[5m])) /
+          sum(rate(graphql_request_duration_seconds_count[5m])) > 5.0
+        for: 5m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: database
+        annotations:
+          summary: "Potential database connection issues detected"
+          description: |
+            High error rate combined with high response times suggests database issues.
+            
+            Error rate: {{ $value | humanizePercentage }}
+            Avg response time: >5s
+            
+            Check:
+            - Database connectivity
+            - Connection pool settings
+            - Database performance metrics
+            - Query execution plans
+            
+            Runbook: https://docs.pcf.example.com/runbooks/database-issues
+
+      # Authorization Service Issues
+      - alert: AuthorizationServiceIssues
+        expr: |
+          sum(rate(authorization_check_total{result="denied"}[5m])) /
+          sum(rate(authorization_check_total[5m])) > 0.50
+        for: 5m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: authorization
+        annotations:
+          summary: "High authorization denial rate detected"
+          description: |
+            More than 50% of authorization checks are being denied.
+            Current denial rate: {{ $value | humanizePercentage }}
+            
+            This may indicate:
+            - SpiceDB service issues
+            - Permission configuration problems
+            - Potential security incident
+            - Client authentication issues
+            
+            Runbook: https://docs.pcf.example.com/runbooks/auth-issues
+
+      # Observability Overhead Alert
+      - alert: ObservabilityOverhead
+        expr: |
+          (
+            sum(rate(http_request_duration_seconds{path="/metrics"}[5m])) /
+            sum(rate(http_request_total[5m]))
+          ) > 0.10
+        for: 15m
+        labels:
+          severity: info
+          service: pcf-api
+          component: observability
+        annotations:
+          summary: "Observability overhead is higher than expected"
+          description: |
+            Metrics collection is taking more than 10% of total request handling time.
+            
+            This may indicate:
+            - Too many metrics being collected
+            - Inefficient metric recording
+            - High cardinality metrics
+            
+            Consider:
+            - Reviewing metric collection patterns
+            - Implementing sampling
+            - Optimizing metric recording code
+
+  - name: pcf-api-slo-alerts
+    interval: 5m
+    rules:
+      # SLO: 99.5% availability
+      - alert: SLOAvailabilityBreach
+        expr: |
+          (
+            1 - (
+              sum(rate(graphql_request_total{status="error"}[30d])) /
+              sum(rate(graphql_request_total[30d]))
+            )
+          ) < 0.995
+        for: 5m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: slo
+          slo_type: availability
+        annotations:
+          summary: "PCF API availability SLO breach"
+          description: |
+            30-day availability is below 99.5% SLO target.
+            Current availability: {{ $value | humanizePercentage }}
+            SLO target: 99.5%
+            
+            Error budget may be exhausted. Consider:
+            - Reducing deployment frequency
+            - Increasing testing rigor
+            - Implementing additional monitoring
+            
+            SLO Dashboard: https://grafana.example.com/d/slo-dashboard
+
+      # SLO: P95 latency under 500ms
+      - alert: SLOLatencyBreach
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(graphql_request_duration_seconds_bucket[30d])) by (le)
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: slo
+          slo_type: latency
+        annotations:
+          summary: "PCF API latency SLO breach"
+          description: |
+            30-day P95 latency is above 500ms SLO target.
+            Current P95: {{ $value }}s
+            SLO target: 500ms
+            
+            Consider:
+            - Performance optimization initiatives
+            - Database query optimization
+            - Caching improvements
+            - Infrastructure scaling
+
+  - name: pcf-api-capacity-alerts
+    interval: 1m
+    rules:
+      # High Request Rate
+      - alert: HighRequestRate
+        expr: |
+          sum(rate(graphql_request_total[5m])) > 1000
+        for: 5m
+        labels:
+          severity: info
+          service: pcf-api
+          component: capacity
+        annotations:
+          summary: "PCF API experiencing high request rate"
+          description: |
+            Request rate is above 1000 requests/second.
+            Current rate: {{ $value }} req/s
+            
+            Monitor for:
+            - Increased response times
+            - Resource utilization
+            - Potential need for scaling
+            
+            Consider:
+            - Auto-scaling configuration
+            - Load balancer settings
+            - Circuit breaker thresholds
+
+      # Sustained High Load
+      - alert: SustainedHighLoad
+        expr: |
+          sum(rate(graphql_request_total[5m])) > 500
+        for: 30m
+        labels:
+          severity: warning
+          service: pcf-api
+          component: capacity
+        annotations:
+          summary: "PCF API under sustained high load"
+          description: |
+            Request rate has been above 500 req/s for more than 30 minutes.
+            Current rate: {{ $value }} req/s
+            
+            Actions to consider:
+            - Scale up application instances
+            - Review resource utilization
+            - Check for traffic patterns
+            - Validate auto-scaling configuration
+
+# Alert routing and notification configuration
+# This would typically be in alertmanager.yml, but included here for completeness
+route:
+  group_by: ['alertname', 'service', 'severity']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default-receiver'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      repeat_interval: 5m
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+    - match:
+        severity: info
+      receiver: 'info-alerts'
+
+receivers:
+  - name: 'default-receiver'
+    # Configure your default notification method
+  - name: 'critical-alerts'
+    # Configure immediate notification for critical alerts
+  - name: 'warning-alerts'
+    # Configure standard notification for warnings
+  - name: 'info-alerts'
+    # Configure low-priority notification for info alerts
