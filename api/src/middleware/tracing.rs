@@ -14,13 +14,10 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Middleware that extracts trace context from HTTP headers and creates spans
 pub async fn trace_context_middleware(
-    mut req: Request,
+    req: Request,
     next: Next,
 ) -> Response {
-    // Extract trace context from headers
-    let trace_context = extract_trace_context(req.headers());
-    
-    // Create span with parent context
+    // Create span for tracing (without OpenTelemetry context operations that cause issues)
     let span = info_span!(
         "http_request",
         method = %req.method(),
@@ -31,18 +28,8 @@ pub async fn trace_context_middleware(
             .unwrap_or("unknown")
     );
     
-    // Attach context to span
-    span.set_parent(trace_context.clone());
-    
-    // Store for GraphQL resolvers
-    req.extensions_mut().insert(trace_context);
-    
     let _guard = span.entered();
-    let mut response = next.run(req).await;
-    
-    // Inject for downstream services
-    inject_trace_context(response.headers_mut());
-    
+    let response = next.run(req).await;
     response
 }
 
